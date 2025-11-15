@@ -33,7 +33,7 @@ const Results = () => {
         </div>
         <div className="flex  gap-6 items-stretch">
           <div className="flex flex-col gap-4">
-            <div className="flex gap-4 items-end ">
+            <div className="flex gap-4 items-end">
               <Percentagechart percentage={95} title="Technical" selected />
               <Percentagechart percentage={75} title="Diagramming" />
               <Percentagechart percentage={50} title="Linguistics" />
