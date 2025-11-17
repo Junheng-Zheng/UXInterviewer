@@ -3,7 +3,10 @@ import Button from "../Atoms/Button";
 import Dynamiccontainer from "../Atoms/Dynamiccontainer";
 import Dropdown from "../Molecules/Dropdown";
 import { useState } from "react";
+import useStore from "../../../store/module";
+
 import { useEffect } from "react";
+
 import Counter from "../Atoms/Counter";
 const Challangecycle = () => {
   const design = [
@@ -52,9 +55,13 @@ const Challangecycle = () => {
   const [targetLocked, setTargetLocked] = useState(false);
   const [tohelpLocked, setTohelpLocked] = useState(false);
 
-  const [designValue, setDesignValue] = useState("");
-  const [targetValue, setTargetValue] = useState("");
-  const [tohelpValue, setTohelpValue] = useState("");
+  const designValue = useStore((state) => state.design);
+  const targetValue = useStore((state) => state.target);
+  const tohelpValue = useStore((state) => state.tohelp);
+
+  const setDesign = useStore((state) => state.setDesign);
+  const setTarget = useStore((state) => state.setTarget);
+  const setTohelp = useStore((state) => state.setTohelp);
 
   const [reloadRotation, setreloadRotation] = useState(0);
 
@@ -71,13 +78,13 @@ const Challangecycle = () => {
 
   const reloadChallenge = () => {
     if (!designLocked) {
-      setDesignValue(design[Math.floor(Math.random() * design.length)]);
+      setDesign(design[Math.floor(Math.random() * design.length)]);
     }
     if (!targetLocked) {
-      setTargetValue(target[Math.floor(Math.random() * target.length)]);
+      setTarget(target[Math.floor(Math.random() * target.length)]);
     }
     if (!tohelpLocked) {
-      setTohelpValue(tohelp[Math.floor(Math.random() * tohelp.length)]);
+      setTohelp(tohelp[Math.floor(Math.random() * tohelp.length)]);
     }
   };
 

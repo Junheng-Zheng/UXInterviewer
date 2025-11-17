@@ -10,7 +10,7 @@ import Profile from "./Components/Molecules/Profile";
 import Profilenavbar from "./Components/Organisms/Profilenavbar";
 import { useState, useEffect } from "react";
 import Results from "./Components/Templates/Results";
-
+import useStore from "../store/module";
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((m) => m.Excalidraw),
   { ssr: false }
@@ -21,6 +21,8 @@ export default function Home() {
   const [isPaused, setIsPaused] = useState(false);
   const [warning, setWarning] = useState(false);
 
+  const { design, target, tohelp } = useStore();
+  console.log(design, target, tohelp);
   // TIMER
   useEffect(() => {
     if (seconds <= 0 || isPaused) return;
@@ -50,6 +52,7 @@ export default function Home() {
         {`window.EXCALIDRAW_ASSET_PATH = "https://unpkg.com/@excalidraw/excalidraw/dist/";`}
       </Script>
 
+      <Interview />
       {seconds > 0 && (
         <div className="h-dvh relative p-12">
           {/* TIMER BAR */}
