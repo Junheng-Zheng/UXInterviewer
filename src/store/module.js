@@ -4,6 +4,7 @@ const initialState = {
   design: "",
   target: "",
   tohelp: "",
+  time: 15,
 };
 
 const useStore = create((set) => ({
@@ -11,6 +12,7 @@ const useStore = create((set) => ({
   setDesign: (design) => set((state) => ({ design })),
   setTarget: (target) => set((state) => ({ target })),
   setTohelp: (tohelp) => set((state) => ({ tohelp })),
+  setTime: (time) => set((state) => ({ time })),
 }));
 
 export default useStore;

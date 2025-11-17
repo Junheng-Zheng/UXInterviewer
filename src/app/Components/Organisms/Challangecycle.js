@@ -4,7 +4,7 @@ import Dynamiccontainer from "../Atoms/Dynamiccontainer";
 import Dropdown from "../Molecules/Dropdown";
 import { useState } from "react";
 import useStore from "../../../store/module";
-
+import Link from "next/link";
 import { useEffect } from "react";
 
 import Counter from "../Atoms/Counter";
@@ -65,14 +65,18 @@ const Challangecycle = () => {
 
   const [reloadRotation, setreloadRotation] = useState(0);
 
-  const [time, setTime] = useState(15);
+  const time = useStore((state) => state.time);
+  const setTime = useStore((state) => state.setTime);
   const [showModal, setShowModal] = useState(false);
   const setMinusTime = () => {
     if (time > 5) {
       setTime(time - 5);
     }
+    setTime(time - 5);
   };
+
   const setPlusTime = () => {
+    setTime(time + 5);
     setTime(time + 5);
   };
 
@@ -141,14 +145,16 @@ const Challangecycle = () => {
               </Dropdown>
             </div>
 
-            <Button
-              variant="primary"
-              icon="fa-solid fa-play"
-              className="w-full"
-              onClick={() => {}}
-            >
-              Start Interview
-            </Button>
+            <Link href="/Interview">
+              <Button
+                variant="primary"
+                icon="fa-solid fa-play"
+                className="w-full"
+                onClick={() => {}}
+              >
+                Start Interview
+              </Button>
+            </Link>
             <button
               className="cursor-pointer hover:scale-95 transition-all duration-300 text-tertiary"
               onClick={() => setShowModal(false)}
