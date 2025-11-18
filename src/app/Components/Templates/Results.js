@@ -8,6 +8,28 @@ const Results = () => {
   const design = useStore((state) => state.design);
   const target = useStore((state) => state.target);
   const tohelp = useStore((state) => state.tohelp);
+  const evaluation = useStore((state) => state.evaluation);
+
+  // Default values if evaluation is not loaded yet
+  const overallScore = evaluation?.overall_score ?? 0;
+  const confidenceLevel = evaluation?.confidence_level ?? "low";
+  const criteria = evaluation?.criteria ?? [];
+  const summary = evaluation?.summary ?? {
+    strengths: [],
+    improvements: [],
+    overall_assessment: "Evaluation loading...",
+  };
+
+  // Map criteria to display format
+  const criteriaList = criteria.length > 0 
+    ? criteria 
+    : [
+        { name: "Information Architecture", score: 0, feedback: "" },
+        { name: "Hierarchy & Layout", score: 0, feedback: "" },
+        { name: "Labeling & Clarity", score: 0, feedback: "" },
+        { name: "Consistency & Naming", score: 0, feedback: "" },
+        { name: "Creativity & Visual Appeal", score: 0, feedback: "" },
+      ];
 
   return (
     <div>
@@ -40,33 +62,70 @@ const Results = () => {
           <div className="w-ful h-px bg-border"></div>
           <div className="flex  gap-6 items-stretch">
             <div className="flex flex-col gap-4">
+              {/* Diagramming Score Display */}
               <div className="flex gap-4 items-end">
-                <Percentagechart percentage={95} title="Technical" selected />
-                <Percentagechart percentage={75} title="Diagramming" />
+                <Percentagechart 
+                  percentage={overallScore} 
+                  title="Diagramming" 
+                  selected 
+                />
+                <Percentagechart percentage={95} title="Technical"/>
                 <Percentagechart percentage={50} title="Linguistics" />
+                {confidenceLevel && (
+                  <div className="px-3 py-2 bg-gray-100 rounded-full">
+                    <p className="text-sm text-gray-600">
+                      Confidence: <span className="font-semibold capitalize">{confidenceLevel}</span>
+                    </p>
+                  </div>
+                )}
               </div>
+              
+              {/* Criteria Breakdown */}
               <div>
-                <Listitem className="flex justify-between">
-                  <p>Information Architecture </p>
-                  <p>95%</p>
-                </Listitem>
-                <Listitem className="flex justify-between">
-                  <p>Hierarchy & Layout </p>
-                  <p>75%</p>
-                </Listitem>
-                <Listitem className="flex justify-between">
-                  <p>Labeling & Clarity </p>
-                  <p>50%</p>
-                </Listitem>
-                <Listitem className="flex justify-between">
-                  <p>Consistency & Naming </p>
-                  <p>50%</p>
-                </Listitem>
-                <Listitem className="flex justify-between">
-                  <p>Creativity & Visual Appeal </p>
-                  <p>50%</p>
-                </Listitem>
+                {criteriaList.map((criterion, index) => (
+                  <Listitem key={index} className="flex justify-between">
+                    <div className="flex flex-col gap-1">
+                      <p>{criterion.name}</p>
+                      {criterion.feedback && (
+                        <p className="text-xs text-tertiary">{criterion.feedback}</p>
+                      )}
+                    </div>
+                    <p className="font-semibold">
+                      {Math.round(criterion.score)} / {criterion.weight !== undefined ? Math.round(criterion.weight) : '—'}
+                    </p>
+                  </Listitem>
+                ))}
               </div>
+
+              {/* Summary Section */}
+              {summary && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-semibold mb-2">Overall Assessment</h3>
+                  <p className="text-sm text-gray-700 mb-3">{summary.overall_assessment}</p>
+                  
+                  {summary.strengths && summary.strengths.length > 0 && (
+                    <div className="mb-3">
+                      <h4 className="text-xs font-semibold text-green-700 mb-1">Strengths:</h4>
+                      <ul className="list-disc list-inside text-xs text-gray-600">
+                        {summary.strengths.map((strength, idx) => (
+                          <li key={idx}>{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {summary.improvements && summary.improvements.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-orange-700 mb-1">Improvements:</h4>
+                      <ul className="list-disc list-inside text-xs text-gray-600">
+                        {summary.improvements.map((improvement, idx) => (
+                          <li key={idx}>{improvement}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
