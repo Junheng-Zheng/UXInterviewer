@@ -81,6 +81,12 @@ const Interview = () => {
         throw new Error("No Excalidraw data available. Please draw something first.");
       }
       
+      // Filter out deleted elements (Excalidraw marks deleted elements with isDeleted: true)
+      if (elements && Array.isArray(elements)) {
+        elements = elements.filter(element => !element.isDeleted);
+        console.log("After filtering deleted elements:", elements.length, "elements");
+      }
+      
       if (!elements || !Array.isArray(elements) || elements.length === 0) {
         throw new Error("Excalidraw canvas is empty. Please add some elements before submitting.");
       }
@@ -99,19 +105,30 @@ const Interview = () => {
       }
 
       try {
-        // Export Excalidraw as PNG blob
+        // Export Excalidraw as PNG blob with proper settings
         const blob = await exportToBlob({
           elements,
-          appState: appState || {},
+          appState: {
+            ...(appState || {}),
+            exportBackground: true, // Ensure background is exported
+            exportWithDarkMode: false, // Use light mode for consistent export
+          },
           mimeType: "image/png",
-          // Note: quality parameter is not used for PNG (lossless format)
         });
+        
+        // Validate blob size (should be at least a few KB for a real image)
+        if (blob.size < 1000) {
+          console.warn("Screenshot blob is suspiciously small:", blob.size, "bytes");
+        }
+        
+        console.log("Screenshot blob size:", (blob.size / 1024).toFixed(2), "KB");
         
         // Convert blob to base64
         screenshotBase64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64String = reader.result.split(",")[1]; // Remove data:image/png;base64, prefix
+            console.log("Base64 screenshot length:", base64String.length, "chars");
             resolve(base64String);
           };
           reader.onerror = reject;
@@ -122,9 +139,11 @@ const Interview = () => {
         throw new Error("Failed to capture screenshot. Please try again.");
       }
       
-      if (!screenshotBase64) {
-        throw new Error("Unable to capture screenshot from Excalidraw");
+      if (!screenshotBase64 || screenshotBase64.length < 100) {
+        throw new Error("Unable to capture screenshot from Excalidraw - screenshot appears to be empty or invalid");
       }
+      
+      console.log("Screenshot captured successfully, base64 length:", screenshotBase64.length);
   
       const response = await fetch("/api/grade-submission", {
         method: "POST",
@@ -135,8 +154,7 @@ const Interview = () => {
           design,
           target,
           tohelp,
-          screenshot: screenshotBase64, // Send screenshot instead of JSON
-          // excalidrawData: compressed, // COMMENTED OUT: JSON data
+          screenshot: screenshotBase64,
           model: selectedModel,
         }),
       });
@@ -151,7 +169,18 @@ const Interview = () => {
             : evaluation.message || "Rate limit exceeded. Please try again in a few moments.";
           throw new Error(retryMessage);
         }
-        throw new Error(evaluation.message || evaluation.error || "Failed to grade submission");
+        
+        // Build detailed error message
+        let errorMessage = evaluation.message || evaluation.error || "Failed to grade submission";
+        if (evaluation.details) {
+          errorMessage += `\n\nDetails: ${evaluation.details}`;
+        }
+        if (evaluation.rawContent) {
+          errorMessage += `\n\nRaw response preview: ${evaluation.rawContent}`;
+        }
+        
+        console.error("API Error Response:", evaluation);
+        throw new Error(errorMessage);
       }
 
       setEvaluation(evaluation);
