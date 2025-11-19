@@ -34,16 +34,9 @@ const Interview = () => {
   const [excalidrawJson, setExcalidrawJson] = useState(null);
   const [excalidrawKey, setExcalidrawKey] = useState(0); // Key to force re-render
   const [currentExcalidrawData, setCurrentExcalidrawData] = useState(null);
-  const [transcript, setTranscript] = useState("");
-  const [interimTranscript, setInterimTranscript] = useState("");
-  const [isListening, setIsListening] = useState(false);
-  const recognitionStartTimeRef = useRef(null);
-  const recognitionRef = useRef(null);
-  const isRecognitionRunningRef = useRef(false);
   const excalidrawDataRef = useRef(null);
 
   const excalidrawRef = useRef(null);
-  const excalidrawAPIRef = useRef(null);
   const setEvaluation = useStore((state) => state.setEvaluation);
   const setScreenshot = useStore((state) => state.setScreenshot);
 
@@ -56,37 +49,16 @@ const Interview = () => {
       // Capture screenshot from Excalidraw
       let screenshotBase64 = null;
       
-      // Get current Excalidraw data directly from the API (most up-to-date)
-      let elements, appState;
-      
-      // Try to get current state from Excalidraw API first
-      if (excalidrawAPIRef.current) {
-        try {
-          elements = excalidrawAPIRef.current.getSceneElements();
-          appState = excalidrawAPIRef.current.getAppState();
-          console.log("Got state from Excalidraw API:", elements.length, "elements");
-        } catch (apiError) {
-          console.warn("Could not get state from Excalidraw API, falling back to onChange data:", apiError);
-          // Fallback to onChange data if API methods aren't available
-          if (excalidrawDataRef.current) {
-            ({ elements, appState } = excalidrawDataRef.current);
-            console.log("Using onChange data:", elements?.length || 0, "elements");
-          }
-        }
-      } else if (excalidrawDataRef.current) {
-        // Fallback to onChange callback data if API isn't available
-        ({ elements, appState } = excalidrawDataRef.current);
-        console.log("Using onChange data (no API):", elements?.length || 0, "elements");
-      } else {
+      // Get Excalidraw data from tracked state (onChange callback)
+      if (!excalidrawDataRef.current) {
         throw new Error("No Excalidraw data available. Please draw something first.");
       }
+
+      const { elements, appState } = excalidrawDataRef.current;
       
       if (!elements || !Array.isArray(elements) || elements.length === 0) {
         throw new Error("Excalidraw canvas is empty. Please add some elements before submitting.");
       }
-      
-      // Log for debugging
-      console.log("Capturing screenshot with", elements.length, "elements");
 
       // Wait for exportToBlob to be available if not loaded yet
       if (!exportToBlob) {
@@ -221,163 +193,6 @@ const Interview = () => {
     }
   }, [secondsLeft, warning]);
 
-  // Initialize Speech Recognition
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (!SpeechRecognition) {
-        console.warn("Speech Recognition API not supported in this browser");
-        return;
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onstart = () => {
-        isRecognitionRunningRef.current = true;
-        // Record start time when recognition begins
-        if (!recognitionStartTimeRef.current) {
-          recognitionStartTimeRef.current = Date.now();
-        }
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event) => {
-        let interimText = "";
-        let finalText = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalText += transcript + " ";
-          } else {
-            interimText += transcript;
-          }
-        }
-
-        // Add final words to transcript with timestamp and newline
-        if (finalText) {
-          // Calculate elapsed time from start
-          const elapsedMs = recognitionStartTimeRef.current 
-            ? Date.now() - recognitionStartTimeRef.current 
-            : 0;
-          const elapsedSeconds = Math.floor(elapsedMs / 1000);
-          const minutes = Math.floor(elapsedSeconds / 60);
-          const seconds = elapsedSeconds % 60;
-          const timestamp = `[${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}]`;
-          
-          setTranscript((prev) => prev + `${timestamp} ${finalText.trim()}\n\n`);
-        }
-        
-        // Update interim transcript for real-time display
-        setInterimTranscript(interimText);
-      };
-
-      recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-        if (event.error === "no-speech") {
-          // Restart recognition if no speech detected and interview is active
-          if (!isSubmitted && !isPaused) {
-            // Small delay before restarting to avoid rapid restarts
-            setTimeout(() => {
-              if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {
-                  // Already started or error, ignore
-                }
-              }
-            }, 500);
-          }
-        } else if (event.error === "not-allowed") {
-          alert("Microphone access denied. Please enable microphone permissions.");
-          setIsListening(false);
-        } else if (event.error === "aborted") {
-          // Aborted error - recognition was stopped unexpectedly
-          isRecognitionRunningRef.current = false;
-          setIsListening(false);
-          // Try to restart if interview is still active
-          console.warn("Speech recognition aborted, attempting to restart...");
-          if (!isSubmitted && !isPaused) {
-            setTimeout(() => {
-              if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {
-                  // Ignore errors on restart
-                }
-              }
-            }, 1000);
-          }
-        } else {
-          // Other errors - log but don't restart automatically
-          console.warn("Speech recognition error:", event.error);
-        }
-      };
-
-      recognition.onend = () => {
-        isRecognitionRunningRef.current = false;
-        setIsListening(false);
-        // Restart recognition if interview is still active
-        if (!isSubmitted && !isPaused) {
-          // Add delay before restarting to avoid rapid restarts
-          setTimeout(() => {
-            if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {
-                // Already started or error, ignore
-              }
-            }
-          }, 500);
-        }
-      };
-
-      recognitionRef.current = recognition;
-
-      return () => {
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
-        }
-      };
-    }
-  }, []);
-
-  // Always listen (start recognition when interview is active)
-  useEffect(() => {
-    if (!recognitionRef.current) return;
-
-    if (!isSubmitted && !isPaused) {
-      // Start recognition when interview is active
-      // Add small delay to avoid race conditions
-      const timeoutId = setTimeout(() => {
-        if (recognitionRef.current && !isSubmitted && !isPaused) {
-          try {
-            recognitionRef.current.start();
-            // onstart handler will set isListening and start time
-          } catch (e) {
-            // Already started or error, ignore
-            console.warn("Could not start recognition:", e);
-          }
-        }
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
-    } else {
-      // Stop recognition when interview ends or is paused
-      try {
-        recognitionRef.current.stop();
-        setIsListening(false);
-      } catch (e) {
-        // Not started, ignore
-      }
-    }
-  }, [isSubmitted, isPaused]);
-
   const timeFormatted = `${String(Math.floor(secondsLeft / 60)).padStart(
     2,
     "0"
@@ -460,63 +275,12 @@ const Interview = () => {
 
           {/* MAIN CONTENT AREA - Split Layout */}
           <div className="h-[calc(100vh-180px)] flex gap-4">
-            {/* TRANSCRIPT BOX */}
-            <div className="w-80 h-full border border-border rounded-lg overflow-hidden bg-white flex flex-col">
-                <div className="px-4 py-3 border-b border-border bg-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">Transcript</h3>
-                  {isListening && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-gray-600">Listening...</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  {transcript || interimTranscript ? (
-                    <div className="space-y-2">
-                      {transcript && (
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                          {transcript}
-                        </p>
-                      )}
-                      {interimTranscript && (
-                        <p className="text-sm text-gray-500 italic whitespace-pre-wrap">
-                          {interimTranscript}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">
-                      {isListening
-                        ? "Listening... Start speaking to see your transcript here."
-                        : "Click to start listening..."}
-                    </p>
-                  )}
-                </div>
-                {(transcript || interimTranscript) && (
-                  <div className="px-4 py-2 border-t border-border bg-gray-50">
-                    <button
-                      onClick={() => {
-                        setTranscript("");
-                        setInterimTranscript("");
-                      }}
-                      className="text-xs text-gray-600 hover:text-gray-800 transition-colors"
-                    >
-                      Clear Transcript
-                    </button>
-                  </div>
-                )}
-              </div>
-            
             {/* EXCALIDRAW */}
             <div className="flex-1 h-full border border-border rounded-lg overflow-hidden">
               <Excalidraw
                 key={excalidrawKey}
                 initialData={excalidrawJson}
                 ref={excalidrawRef}
-                onReady={(api) => {
-                  excalidrawAPIRef.current = api;
-                }}
                 onChange={(elements, appState, files) => {
                   excalidrawDataRef.current = { elements, appState, files };
                 }}
@@ -532,4 +296,3 @@ const Interview = () => {
 };
 
 export default Interview;
-
