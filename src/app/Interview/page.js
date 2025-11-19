@@ -23,15 +23,8 @@ const Interview = () => {
   const [secondsLeft, setSecondsLeft] = useState(timeValue * 60);
   const [isPaused, setIsPaused] = useState(false);
   const [warning, setWarning] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [excalidrawJson, setExcalidrawJson] = useState(null);
   const [excalidrawKey, setExcalidrawKey] = useState(0); // Key to force re-render
-
-  // Handle submit
-  const handleSubmit = () => {
-    setIsSubmitted(true);
-    setIsPaused(true); // Pause the timer when submitted
-  };
 
   // Load test JSON into Excalidraw
   const loadTestJSON = async () => {
@@ -45,13 +38,8 @@ const Interview = () => {
         return;
       }
 
-      // Set the JSON data with scrollToContent and zoomToFitOnFileOpen to auto-zoom
-      // This will automatically zoom and scroll to fit all content (equivalent to Shift+1)
-      setExcalidrawJson({
-        ...data,
-        scrollToContent: true,
-        zoomToFitOnFileOpen: true,
-      });
+      // Set the JSON data and increment key to force Excalidraw to re-render with new data
+      setExcalidrawJson(data);
       setExcalidrawKey((prev) => prev + 1);
     } catch (error) {
       console.error("Error loading test JSON:", error);
@@ -68,14 +56,14 @@ const Interview = () => {
 
   // TIMER
   useEffect(() => {
-    if (secondsLeft <= 0 || isPaused || isSubmitted) return;
+    if (secondsLeft <= 0 || isPaused) return;
 
     const interval = setInterval(() => {
       setSecondsLeft((prev) => prev - 1);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [secondsLeft, isPaused, isSubmitted]);
+  }, [secondsLeft, isPaused]);
 
   // WARNING effect
   useEffect(() => {
@@ -90,12 +78,9 @@ const Interview = () => {
     "0"
   )}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
-  const showInterview = secondsLeft > 0 && !isSubmitted;
-  const showResults = secondsLeft <= 0 || isSubmitted;
-
   return (
     <>
-      {showInterview && (
+      {secondsLeft > 0 && (
         <div className="h-dvh relative p-12">
           {/* TIMER BAR */}
           <div className="px-[20px] py-[16px] bg-primary rounded-full flex items-center gap-6 absolute left-1/2 -translate-x-1/2 top-4 z-30">
@@ -112,15 +97,6 @@ const Interview = () => {
 
             <i className="fa-solid fa-microphone text-white"></i>
             <i className="fa-solid fa-volume-high text-white"></i>
-
-            <button
-              onClick={handleSubmit}
-              className="px-4 py-2 bg-white text-primary rounded-full font-semibold hover:bg-gray-100 transition-colors flex items-center gap-2"
-              title="Submit interview"
-            >
-              <i className="fa-solid fa-check"></i>
-              Submit
-            </button>
           </div>
 
           {/* NAV BAR */}
@@ -168,7 +144,7 @@ const Interview = () => {
         </div>
       )}
 
-      {showResults && <Results />}
+      {secondsLeft <= 0 && <Results />}
     </>
   );
 };

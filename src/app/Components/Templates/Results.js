@@ -5,9 +5,7 @@ import Percentagechart from "../Atoms/Percentagechart";
 import Listitem from "../Atoms/Listitem";
 import useStore from "../../../store/module";
 const Results = () => {
-  const design = useStore((state) => state.design);
-  const target = useStore((state) => state.target);
-  const tohelp = useStore((state) => state.tohelp);
+  const { design, target, tohelp } = useStore();
 
   return (
     <div>
