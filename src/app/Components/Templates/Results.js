@@ -25,14 +25,14 @@ const Results = () => {
                 <p>Easy</p>
                 <p>15 minutes</p>
               </div>
-              <div className="gap-4 flex">
+              {/* <div className="gap-4 flex">
                 <Button variant="secondary" icon="fa-solid fa-eye">
                   View Submission
                 </Button>
                 <Button variant="primary" icon="fa-solid fa-refresh">
                   Try Again
                 </Button>
-              </div>
+              </div> */}
             </div>
           </div>
           <div className="w-ful h-px bg-border"></div>

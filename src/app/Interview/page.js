@@ -7,13 +7,23 @@ import useStore from "../../store/module";
 import Animatedlink from "../Components/Atoms/Animatedlink";
 import Profile from "../Components/Molecules/Profile";
 import Results from "../Components/Templates/Results";
-
+import { useRouter } from "next/navigation";
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((m) => m.Excalidraw),
   { ssr: false }
 );
 
 const Interview = () => {
+  const router = useRouter();
+  // GLOBAL STATE
+  const { design, target, tohelp, time } = useStore();
+
+  useEffect(() => {
+    if (!design || !target || !tohelp || !time) {
+      router.replace("/"); // redirect to homepage
+    }
+  }, [design, target, tohelp, time, router]);
+
   const timeValue = useStore((state) => state.time); // minutes from store
   const [secondsLeft, setSecondsLeft] = useState(timeValue * 60);
   const [isPaused, setIsPaused] = useState(false);
