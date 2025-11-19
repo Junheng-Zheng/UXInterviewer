@@ -86,7 +86,6 @@ export async function POST(request) {
                 type: "image_url",
                 image_url: {
                   url: `data:image/png;base64,${screenshot}`,
-                  detail: "high",
                 },
               },
             ],
@@ -191,107 +190,32 @@ export async function POST(request) {
     const content = data.choices[0]?.message?.content;
 
     if (!content) {
-      console.error("No content received from OpenAI. Full response:", JSON.stringify(data, null, 2));
       return NextResponse.json(
-        { error: "No content received from OpenAI", details: "The API response did not contain any content." },
+        { error: "No content received from OpenAI" },
         { status: 500 }
       );
     }
-
-    // Log the raw content for debugging
-    console.log("=== RAW OPENAI RESPONSE ===");
-    console.log(content);
-    console.log("==========================\n");
 
     // Try to parse JSON from the response
     // Look for JSON in fenced code block labeled "json" (as per scoring_output_format)
     let evaluation;
     try {
-      // Helper function to find balanced JSON object
-      const findJsonObject = (text) => {
-        let start = text.indexOf('{');
-        if (start === -1) return null;
-        
-        let depth = 0;
-        let inString = false;
-        let escapeNext = false;
-        
-        for (let i = start; i < text.length; i++) {
-          const char = text[i];
-          
-          if (escapeNext) {
-            escapeNext = false;
-            continue;
-          }
-          
-          if (char === '\\') {
-            escapeNext = true;
-            continue;
-          }
-          
-          if (char === '"') {
-            inString = !inString;
-            continue;
-          }
-          
-          if (!inString) {
-            if (char === '{') depth++;
-            if (char === '}') {
-              depth--;
-              if (depth === 0) {
-                return text.substring(start, i + 1);
-              }
-            }
-          }
-        }
-        return null;
-      };
-
       // First try to find JSON in ```json ... ``` block
-      const jsonBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+      const jsonBlockMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
       if (jsonBlockMatch) {
-        console.log("Found JSON in code block with json label");
-        evaluation = JSON.parse(jsonBlockMatch[1].trim());
+        evaluation = JSON.parse(jsonBlockMatch[1]);
       } else {
-        // Try to find JSON in ``` ... ``` block (without json label)
-        const codeBlockMatch = content.match(/```\s*([\s\S]*?)\s*```/);
-        if (codeBlockMatch) {
-          const codeContent = codeBlockMatch[1].trim();
-          // Remove "json" label if present at the start
-          const jsonContent = codeContent.replace(/^json\s*/i, '').trim();
-          try {
-            console.log("Found JSON in code block (no label)");
-            evaluation = JSON.parse(jsonContent);
-          } catch (e) {
-            console.log("Failed to parse code block content, trying balanced extraction");
-            // Try to find balanced JSON in the code block
-            const balancedJson = findJsonObject(jsonContent);
-            if (balancedJson) {
-              evaluation = JSON.parse(balancedJson);
-            }
-          }
-        }
-        
-        // If still not parsed, try to find any JSON object in the content using balanced extraction
-        if (!evaluation) {
-          const balancedJson = findJsonObject(content);
-          if (balancedJson) {
-            console.log("Found JSON object using balanced extraction");
-            evaluation = JSON.parse(balancedJson);
-          } else {
-            throw new Error("No valid JSON found in response. Content preview: " + content.substring(0, 200));
-          }
+        // Fallback: try to find any JSON object in the content
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          evaluation = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("No JSON found in response");
         }
       }
     } catch (parseError) {
-      console.error("JSON Parse Error:", parseError.message);
-      console.error("Content that failed to parse:", content);
       return NextResponse.json(
-        { 
-          error: "Failed to parse evaluation response", 
-          details: parseError.message,
-          rawContent: content.substring(0, 500) // Include first 500 chars for debugging
-        },
+        { error: "Failed to parse evaluation response", details: parseError.message },
         { status: 500 }
       );
     }
