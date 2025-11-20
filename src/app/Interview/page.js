@@ -41,6 +41,9 @@ const Interview = () => {
   const recognitionRef = useRef(null);
   const isRecognitionRunningRef = useRef(false);
   const excalidrawDataRef = useRef(null);
+  const isSubmittedRef = useRef(false);
+  const isPausedRef = useRef(false);
+  const secondsLeftRef = useRef(secondsLeft);
 
   const excalidrawRef = useRef(null);
   const excalidrawAPIRef = useRef(null);
@@ -51,6 +54,18 @@ const Interview = () => {
   const handleSubmit = async () => {
     setIsPaused(true);
     setIsGrading(true);
+    
+    // Stop speech recognition immediately when submitting
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        console.log("Speech recognition stopped on submit");
+      } catch (e) {
+        // Recognition might not be running, ignore
+      }
+    }
   
     try {
       // Capture screenshot from Excalidraw
@@ -224,6 +239,19 @@ const Interview = () => {
     }
   };
 
+  // Update refs when state changes so event handlers can access current values
+  useEffect(() => {
+    isSubmittedRef.current = isSubmitted;
+  }, [isSubmitted]);
+  
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+  
+  useEffect(() => {
+    secondsLeftRef.current = secondsLeft;
+  }, [secondsLeft]);
+
   // Reset timer whenever `timeValue` changes
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -310,10 +338,13 @@ const Interview = () => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "no-speech") {
           // Restart recognition if no speech detected and interview is active
-          if (!isSubmitted && !isPaused) {
+          // Use refs to get current state values
+          const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
+          if (showInterview && !isPausedRef.current) {
             // Small delay before restarting to avoid rapid restarts
             setTimeout(() => {
-              if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
+              const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
+              if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
                 try {
                   recognitionRef.current.start();
                 } catch (e) {
@@ -331,9 +362,11 @@ const Interview = () => {
           setIsListening(false);
           // Try to restart if interview is still active
           console.warn("Speech recognition aborted, attempting to restart...");
-          if (!isSubmitted && !isPaused) {
+          const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
+          if (showInterview && !isPausedRef.current) {
             setTimeout(() => {
-              if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
+              const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
+              if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
                 try {
                   recognitionRef.current.start();
                 } catch (e) {
@@ -351,11 +384,14 @@ const Interview = () => {
       recognition.onend = () => {
         isRecognitionRunningRef.current = false;
         setIsListening(false);
-        // Restart recognition if interview is still active
-        if (!isSubmitted && !isPaused) {
+        // Only restart recognition if interview is still active (not submitted and time remaining)
+        // Use refs to get current state values
+        const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
+        if (showInterview && !isPausedRef.current) {
           // Add delay before restarting to avoid rapid restarts
           setTimeout(() => {
-            if (!isSubmitted && !isPaused && recognitionRef.current && !isRecognitionRunningRef.current) {
+            const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
+            if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
               try {
                 recognitionRef.current.start();
               } catch (e) {
@@ -363,6 +399,8 @@ const Interview = () => {
               }
             }
           }, 500);
+        } else {
+          console.log("Speech recognition ended - not restarting (interview finished or results shown)");
         }
       };
 
@@ -380,11 +418,13 @@ const Interview = () => {
   useEffect(() => {
     if (!recognitionRef.current) return;
 
-    if (!isSubmitted && !isPaused) {
+    const showInterview = secondsLeft > 0 && !isSubmitted;
+    
+    if (showInterview && !isPaused) {
       // Start recognition when interview is active
       // Add small delay to avoid race conditions
       const timeoutId = setTimeout(() => {
-        if (recognitionRef.current && !isSubmitted && !isPaused) {
+        if (recognitionRef.current && secondsLeft > 0 && !isSubmitted && !isPaused) {
           try {
             recognitionRef.current.start();
             // onstart handler will set isListening and start time
@@ -397,15 +437,32 @@ const Interview = () => {
 
       return () => clearTimeout(timeoutId);
     } else {
-      // Stop recognition when interview ends or is paused
+      // Stop recognition when interview ends, is paused, or results are shown
       try {
         recognitionRef.current.stop();
+        isRecognitionRunningRef.current = false;
         setIsListening(false);
+        console.log("Speech recognition stopped - interview ended or results shown");
       } catch (e) {
         // Not started, ignore
       }
     }
-  }, [isSubmitted, isPaused]);
+  }, [isSubmitted, isPaused, secondsLeft]);
+
+  // Explicitly stop recognition when results are shown
+  useEffect(() => {
+    const showResults = secondsLeft <= 0 || isSubmitted;
+    if (showResults && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        console.log("Speech recognition stopped - results page shown");
+      } catch (e) {
+        // Recognition might not be running, ignore
+      }
+    }
+  }, [isSubmitted, secondsLeft]);
 
   const timeFormatted = `${String(Math.floor(secondsLeft / 60)).padStart(
     2,
