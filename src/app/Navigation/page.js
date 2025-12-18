@@ -5,10 +5,11 @@ import Whiteboard from "../Pages/Whiteboard";
 const Navigation = () => {
   const [navSelected, setNavSelected] = useState("Whiteboard");
   return (
-    <div className="text-black p-12 flex flex-col gap-4">
+    <div className="text-black/80 p-12 flex flex-col gap-4">
+      {/* <div className="absolute inset-0 bg-grid pointer-events-none" /> */}
       {/* header */}
-      <div className="flex items-center border-b-[0.5px] border-gray-200 pb-4 justify-between">
-        <div className="flex items-center gap-3 rounded-full text-xs px-4 py-2 bg-gray-100">
+      <div className="flex z-2 items-center border-b-[0.5px] border-gray-200 pb-4 justify-between">
+        <div className="flex items-center gap-3 rounded-full text-xs px-2.5 py-2 bg-gray-100">
           {["Whiteboard", "History"].map((item) => (
             <button
               key={item}
