@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getAWSCredentials } from '@/lib/identity-pool';
+import { getAWSCredentialsWithRefresh } from '@/lib/auth-helper';
 import { getItem } from '@/lib/dynamodb';
 
 /**
@@ -8,18 +8,8 @@ import { getItem } from '@/lib/dynamodb';
  */
 export async function POST(request) {
   try {
-    // Get user session
-    const session = await getSession();
-
-    if (!session || !session.idToken) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
-    }
-
-    // Get AWS credentials
-    const credentials = await getAWSCredentials(session.idToken);
+    // Get user session and AWS credentials (with automatic token refresh)
+    const { credentials, session } = await getAWSCredentialsWithRefresh();
 
     // Get key from request body
     const { key } = await request.json();

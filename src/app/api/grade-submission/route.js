@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from '@/lib/session';
-import { getAWSCredentials } from '@/lib/identity-pool';
+import { getAWSCredentialsWithRefresh } from '@/lib/auth-helper';
 import { putItem } from '@/lib/dynamodb';
 
 // Get SYSTEM_PROMPT from environment variable
@@ -343,7 +343,8 @@ export async function POST(request) {
       
       if (session && session.idToken) {
         try {
-          const credentials = await getAWSCredentials(session.idToken);
+          // Get AWS credentials with automatic token refresh if needed
+          const { credentials } = await getAWSCredentialsWithRefresh();
           
           // Create unique submission ID
           const submissionId = `submission-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;

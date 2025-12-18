@@ -14,6 +14,8 @@ const identityClient = new CognitoIdentityClient({
 
 /**
  * Get AWS credentials from Cognito Identity Pool using ID token
+ * Note: Token expiration should be checked before calling this function
+ * Use getAWSCredentialsWithRefresh() from auth-helper.js for automatic token refresh
  * @param {string} idToken - The ID token from Cognito User Pool
  * @returns {Promise<{accessKeyId: string, secretAccessKey: string, sessionToken: string, identityId: string}>}
  */
