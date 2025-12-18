@@ -13,27 +13,63 @@ const Results = () => {
   const evaluation = useStore((state) => state.evaluation);
   const screenshot = useStore((state) => state.screenshot);
   const [showJson, setShowJson] = useState(false);
+  const [selectedSection, setSelectedSection] = useState('diagramming'); // 'diagramming', 'technical', or 'linguistic'
 
   // Default values if evaluation is not loaded yet
   const overallScore = evaluation?.overall_score ?? 0;
+  const diagramScore = evaluation?.diagram_overall_score ?? evaluation?.overall_score ?? 0;
+  const technicalScore = evaluation?.technical_overall_score ?? 0;
+  const transcriptScore = evaluation?.transcript_overall_score ?? 0;
   const confidenceLevel = evaluation?.confidence_level ?? "low";
-  const criteria = evaluation?.criteria ?? [];
+  
+  // Handle new nested criteria structure
+  const criteriaObj = evaluation?.criteria;
+  let diagrammingCriteria = [];
+  let technicalCriteria = [];
+  let linguisticCriteria = [];
+  
+  if (criteriaObj && typeof criteriaObj === 'object' && !Array.isArray(criteriaObj)) {
+    // New format: criteria is an object with diagramming, technical, linguistic arrays
+    diagrammingCriteria = criteriaObj.diagramming || [];
+    technicalCriteria = criteriaObj.technical || [];
+    linguisticCriteria = criteriaObj.linguistic || [];
+  } else if (Array.isArray(criteriaObj)) {
+    // Legacy format: criteria is a flat array - assign to diagramming as default
+    diagrammingCriteria = criteriaObj;
+  }
+  
+  // Default fallback if no criteria found
+  if (diagrammingCriteria.length === 0 && technicalCriteria.length === 0 && linguisticCriteria.length === 0) {
+    diagrammingCriteria = [
+      { name: "Information Architecture", score: 0, feedback: "", weight: 25 },
+      { name: "Hierarchy & Layout", score: 0, feedback: "", weight: 20 },
+      { name: "Labeling & Clarity", score: 0, feedback: "", weight: 15 },
+      { name: "Consistency & Naming", score: 0, feedback: "", weight: 15 },
+      { name: "Creativity & Visual Appeal", score: 0, feedback: "", weight: 10 },
+    ];
+  }
+  
+  // Get criteria list based on selected section
+  const getCriteriaForSection = (section) => {
+    switch (section) {
+      case 'diagramming':
+        return diagrammingCriteria;
+      case 'technical':
+        return technicalCriteria;
+      case 'linguistic':
+        return linguisticCriteria;
+      default:
+        return diagrammingCriteria;
+    }
+  };
+  
+  const criteriaList = getCriteriaForSection(selectedSection);
+  
   const summary = evaluation?.summary ?? {
     strengths: [],
     improvements: [],
     overall_assessment: "Evaluation loading...",
   };
-  //test
-  // Map criteria to display format
-  const criteriaList = criteria.length > 0 
-    ? criteria 
-    : [
-        { name: "Information Architecture", score: 0, feedback: "" },
-        { name: "Hierarchy & Layout", score: 0, feedback: "" },
-        { name: "Labeling & Clarity", score: 0, feedback: "" },
-        { name: "Consistency & Naming", score: 0, feedback: "" },
-        { name: "Creativity & Visual Appeal", score: 0, feedback: "" },
-      ];
 
   return (
     <div>
@@ -66,15 +102,41 @@ const Results = () => {
           <div className="w-ful h-px bg-border"></div>
           <div className="flex  gap-6 items-stretch">
             <div className="flex flex-col gap-4">
-              {/* Diagramming Score Display */}
+              {/* Score Display */}
               <div className="flex gap-4 items-end">
-                <Percentagechart 
-                  percentage={overallScore} 
-                  title="Diagramming" 
-                  selected 
-                />
-                <Percentagechart percentage={95} title="Technical"/>
-                <Percentagechart percentage={50} title="Linguistics" />
+                <button
+                  onClick={() => setSelectedSection('diagramming')}
+                  className="cursor-pointer focus:outline-none"
+                  type="button"
+                >
+                  <Percentagechart 
+                    percentage={Math.round(diagramScore)} 
+                    title="Diagramming" 
+                    selected={selectedSection === 'diagramming'}
+                  />
+                </button>
+                <button
+                  onClick={() => setSelectedSection('technical')}
+                  className="cursor-pointer focus:outline-none"
+                  type="button"
+                >
+                  <Percentagechart 
+                    percentage={Math.round(technicalScore)} 
+                    title="Technical"
+                    selected={selectedSection === 'technical'}
+                  />
+                </button>
+                <button
+                  onClick={() => setSelectedSection('linguistic')}
+                  className="cursor-pointer focus:outline-none"
+                  type="button"
+                >
+                  <Percentagechart 
+                    percentage={Math.round(transcriptScore)} 
+                    title="Linguistics"
+                    selected={selectedSection === 'linguistic'}
+                  />
+                </button>
                 {confidenceLevel && (
                   <div className="px-3 py-2 bg-gray-100 rounded-full">
                     <p className="text-sm text-gray-600">
@@ -87,14 +149,14 @@ const Results = () => {
               {/* Criteria Breakdown */}
               <div>
                 {criteriaList.map((criterion, index) => (
-                  <Listitem key={index} className="flex justify-between">
-                    <div className="flex flex-col gap-1">
-                      <p>{criterion.name}</p>
+                  <Listitem key={index} className="flex justify-between items-start gap-4">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <p className="break-words">{criterion.name}</p>
                       {criterion.feedback && (
-                        <p className="text-xs text-tertiary">{criterion.feedback}</p>
+                        <p className="text-xs text-tertiary break-words">{criterion.feedback}</p>
                       )}
                     </div>
-                    <p className="font-semibold">
+                    <p className="font-semibold whitespace-nowrap flex-shrink-0 ml-2">
                       {Math.round(criterion.score)} / {criterion.weight !== undefined ? Math.round(criterion.weight) : '—'}
                     </p>
                   </Listitem>

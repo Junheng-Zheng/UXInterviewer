@@ -93,7 +93,7 @@ export async function POST(request) {
           },
         ],
         temperature: 0.7,
-        max_tokens: 1500,
+        max_tokens: 4000, // Increased to ensure complete JSON response
       };
     } else {
       return NextResponse.json(
@@ -248,15 +248,40 @@ export async function POST(request) {
       };
 
       // First try to find JSON in ```json ... ``` block
-      const jsonBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+      // Use a more robust regex that handles both complete and potentially truncated blocks
+      let jsonBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+      
+      // If not found, try to find a JSON block that might be at the end (truncated)
+      if (!jsonBlockMatch) {
+        const jsonBlockAtEnd = content.match(/```json\s*([\s\S]*)$/);
+        if (jsonBlockAtEnd) {
+          console.log("Found JSON block at end (may be truncated)");
+          jsonBlockMatch = jsonBlockAtEnd;
+        }
+      }
+      
       if (jsonBlockMatch) {
         console.log("Found JSON in code block with json label");
-        evaluation = JSON.parse(jsonBlockMatch[1].trim());
+        let jsonText = jsonBlockMatch[1].trim();
+        try {
+          evaluation = JSON.parse(jsonText);
+        } catch (e) {
+          // If parsing fails, try balanced extraction in case JSON is incomplete
+          console.log("Direct parse failed, trying balanced extraction");
+          const balancedJson = findJsonObject(jsonText);
+          if (balancedJson) {
+            evaluation = JSON.parse(balancedJson);
+          } else {
+            throw new Error("JSON in code block is invalid or truncated: " + e.message);
+          }
+        }
       } else {
         // Try to find JSON in ``` ... ``` block (without json label)
-        const codeBlockMatch = content.match(/```\s*([\s\S]*?)\s*```/);
-        if (codeBlockMatch) {
-          const codeContent = codeBlockMatch[1].trim();
+        const codeBlockMatches = content.match(/```[\s\S]*?```/g);
+        if (codeBlockMatches && codeBlockMatches.length > 0) {
+          // Get the last code block (most likely to contain the JSON)
+          const lastBlock = codeBlockMatches[codeBlockMatches.length - 1];
+          const codeContent = lastBlock.replace(/```/g, '').trim();
           // Remove "json" label if present at the start
           const jsonContent = codeContent.replace(/^json\s*/i, '').trim();
           try {
@@ -268,18 +293,31 @@ export async function POST(request) {
             const balancedJson = findJsonObject(jsonContent);
             if (balancedJson) {
               evaluation = JSON.parse(balancedJson);
+            } else {
+              throw new Error("JSON appears to be truncated or invalid: " + e.message);
             }
           }
-        }
-        
-        // If still not parsed, try to find any JSON object in the content using balanced extraction
-        if (!evaluation) {
-          const balancedJson = findJsonObject(content);
-          if (balancedJson) {
-            console.log("Found JSON object using balanced extraction");
-            evaluation = JSON.parse(balancedJson);
+        } else {
+          // Check if there's a partial code block at the end
+          const partialCodeBlock = content.match(/```json\s*([\s\S]*)$/);
+          if (partialCodeBlock) {
+            const jsonText = partialCodeBlock[1].trim();
+            const balancedJson = findJsonObject(jsonText);
+            if (balancedJson) {
+              console.log("Found partial JSON block, extracted balanced JSON");
+              evaluation = JSON.parse(balancedJson);
+            } else {
+              throw new Error("JSON response appears to be truncated. The response was cut off before completion. Try increasing max_tokens or check the API response limits.");
+            }
           } else {
-            throw new Error("No valid JSON found in response. Content preview: " + content.substring(0, 200));
+            // If still not parsed, try to find any JSON object in the content using balanced extraction
+            const balancedJson = findJsonObject(content);
+            if (balancedJson) {
+              console.log("Found JSON object using balanced extraction");
+              evaluation = JSON.parse(balancedJson);
+            } else {
+              throw new Error("No valid JSON found in response. Content preview: " + content.substring(0, 200));
+            }
           }
         }
       }
