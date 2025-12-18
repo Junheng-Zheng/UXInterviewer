@@ -8,7 +8,6 @@ const ConfirmSignup = () => {
   const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -16,24 +15,33 @@ const ConfirmSignup = () => {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Get email and username from URL params if available
+    // Get email and username from URL params
     const emailParam = searchParams.get("email");
     const usernameParam = searchParams.get("username");
     if (emailParam) {
       setEmail(emailParam);
+    } else {
+      // If no email in URL, redirect to signup
+      router.push("/Signup");
     }
     if (usernameParam) {
       setUsername(usernameParam);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    if (!email || !code) {
-      setError("Email and verification code are required");
+    if (!code) {
+      setError("Verification code is required");
+      setLoading(false);
+      return;
+    }
+
+    if (!email) {
+      setError("Email is missing. Please try signing up again.");
       setLoading(false);
       return;
     }
@@ -48,7 +56,6 @@ const ConfirmSignup = () => {
           email,
           username: username || email, // Use UUID username if available, fallback to email
           code,
-          password: password || undefined, // Optional - will auto sign in if provided
         }),
       });
 
@@ -60,17 +67,11 @@ const ConfirmSignup = () => {
         return;
       }
 
-      // Success - if password was provided, user is already signed in
-      if (data.user) {
-        // User is signed in, redirect to home
-        router.push("/");
-      } else {
-        // Just verified, redirect to sign in
-        setSuccess(true);
-        setTimeout(() => {
-          router.push("/Signin");
-        }, 2000);
-      }
+      // Success - redirect to sign in
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/Signin");
+      }, 2000);
     } catch (err) {
       console.error("Confirm signup error:", err);
       setError("An unexpected error occurred");
@@ -110,23 +111,17 @@ const ConfirmSignup = () => {
               We sent a verification code to your email address
             </p>
           </div>
+          {email && (
+            <div className="text-sm text-gray-600">
+              Verification code sent to: <span className="font-medium">{email}</span>
+            </div>
+          )}
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
                 {error}
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              <label className="text-sm text-gray-600">Email</label>
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-gray-600"
-              />
-            </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-sm text-gray-600">Verification Code</label>
@@ -137,32 +132,17 @@ const ConfirmSignup = () => {
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 required
                 maxLength={6}
-                className="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-gray-600 text-center text-2xl tracking-widest"
+                autoFocus
+                className="border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-1 focus:ring-gray-600 text-center text-2xl tracking-widest"
               />
               <p className="text-xs text-gray-500">
                 Check your email for the verification code
               </p>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-sm text-gray-600">
-                Password (optional - to sign in automatically)
-              </label>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-gray-600"
-              />
-              <p className="text-xs text-gray-500">
-                If provided, you'll be signed in automatically after verification
-              </p>
-            </div>
-
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !code}
               className="border border-gray-300 rounded-md p-2 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Verifying..." : "Verify Email"}
@@ -175,9 +155,10 @@ const ConfirmSignup = () => {
             <button
               onClick={async () => {
                 if (!email) {
-                  setError("Please enter your email first");
+                  setError("Email is missing. Please try signing up again.");
                   return;
                 }
+                setError("");
                 try {
                   const response = await fetch("/api/auth/resend-code", {
                     method: "POST",
