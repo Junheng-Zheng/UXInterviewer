@@ -1,0 +1,60 @@
+type,difficulty,domain,value
+design,Easy,productivity,a simple task list screen
+design,Easy,productivity,a note taking screen
+design,Easy,productivity,a calendar scheduling page
+design,Easy,subscription,a login screen
+design,Easy,subscription,a sign up screen
+design,Easy,subscription,a pricing comparison page
+design,Easy,commerce,a checkout page
+design,Easy,productivity,a user profile page
+design,Easy,productivity,a settings page
+design,Easy,subscription,a dashboard showing basic app activity
+
+design,Medium,subscription,a dashboard showing how people use the app
+design,Medium,subscription,a page showing why users stop using the app
+design,Medium,productivity,a screen to manage team members
+design,Medium,operations,a dashboard showing system problems
+design,Medium,developer,a page showing recent app errors
+design,Medium,commerce,a seller dashboard
+design,Medium,commerce,a page to track orders
+design,Medium,content,a content writing and editing page
+design,Medium,content,a knowledge base page
+design,Medium,productivity,a team workspace dashboard
+
+design,Hard,subscription,a dashboard predicting future user behavior
+design,Hard,operations,a real time system monitoring dashboard
+design,Hard,commerce,a complex order and inventory dashboard
+design,Hard,productivity,a large scale task and workflow dashboard
+design,Hard,operations,a platform wide performance dashboard
+
+target,Easy,productivity,a personal productivity app
+target,Easy,productivity,a simple notes app
+target,Easy,commerce,a small online store
+target,Easy,content,a personal blog
+target,Easy,productivity,a habit tracking app
+
+target,Medium,subscription,a paid productivity app
+target,Medium,productivity,a team collaboration app
+target,Medium,commerce,an online marketplace
+target,Medium,content,a content publishing platform
+target,Medium,developer,an internal tool used by engineers
+
+target,Hard,subscription,a large subscription based platform
+target,Hard,commerce,a global ecommerce platform
+target,Hard,operations,a company wide operations system
+target,Hard,developer,a large internal engineering platform
+
+tohelp,Easy,education,students
+tohelp,Easy,productivity,individual users
+tohelp,Easy,productivity,people managing daily tasks
+tohelp,Easy,commerce,small business owners
+
+tohelp,Medium,productivity,teams
+tohelp,Medium,subscription,product managers
+tohelp,Medium,content,content creators
+tohelp,Medium,developer,engineers
+
+tohelp,Hard,operations,large organizations
+tohelp,Hard,operations,operations teams
+tohelp,Hard,developer,platform teams
+tohelp,Hard,operations,global companies
