@@ -71,8 +71,9 @@ const Challangecycle = () => {
   const setMinusTime = () => {
     if (time > 5) {
       setTime(time - 5);
+    } else {
+      setTime(5);
     }
-    setTime(time - 5);
   };
 
   const setPlusTime = () => {

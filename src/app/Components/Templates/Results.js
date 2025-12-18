@@ -1,11 +1,10 @@
+import { useState, useEffect } from "react";
 import Profilenavbar from "../Organisms/Profilenavbar";
 import Dynamiccontainer from "../Atoms/Dynamiccontainer";
 import Button from "../Atoms/Button";
 import Percentagechart from "../Atoms/Percentagechart";
 import Listitem from "../Atoms/Listitem";
 import useStore from "../../../store/module";
-import { useState } from "react";
-
 const Results = () => {
   const design = useStore((state) => state.design);
   const target = useStore((state) => state.target);
@@ -14,6 +13,15 @@ const Results = () => {
   const screenshot = useStore((state) => state.screenshot);
   const [showJson, setShowJson] = useState(false);
   const [selectedSection, setSelectedSection] = useState('diagramming'); // 'diagramming', 'technical', or 'linguistic'
+
+  // Debug: Log evaluation structure when it changes
+  useEffect(() => {
+    if (evaluation) {
+      console.log("Evaluation object:", evaluation);
+      console.log("Evaluation summary:", evaluation.summary);
+      console.log("Overall assessment:", evaluation.summary?.overall_assessment);
+    }
+  }, [evaluation]);
 
   // Default values if evaluation is not loaded yet
   const overallScore = evaluation?.overall_score ?? 0;
@@ -65,11 +73,18 @@ const Results = () => {
   
   const criteriaList = getCriteriaForSection(selectedSection);
   
-  const summary = evaluation?.summary ?? {
-    strengths: [],
-    improvements: [],
-    overall_assessment: "Evaluation loading...",
-  };
+  // Ensure summary always has valid structure with fallbacks
+  const summary = evaluation?.summary 
+    ? {
+        strengths: evaluation.summary.strengths || [],
+        improvements: evaluation.summary.improvements || [],
+        overall_assessment: evaluation.summary.overall_assessment || "No overall assessment provided.",
+      }
+    : {
+        strengths: [],
+        improvements: [],
+        overall_assessment: evaluation ? "No overall assessment provided." : "Evaluation loading...",
+      };
 
   return (
     <div>
@@ -164,10 +179,12 @@ const Results = () => {
               </div>
 
               {/* Summary Section */}
-              {summary && (
+              {evaluation && summary && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                   <h3 className="font-semibold mb-2">Overall Assessment</h3>
-                  <p className="text-sm text-gray-700 mb-3">{summary.overall_assessment}</p>
+                  <p className="text-sm text-gray-700 mb-3">
+                    {summary.overall_assessment || "No overall assessment provided."}
+                  </p>
                   
                   {summary.strengths && summary.strengths.length > 0 && (
                     <div className="mb-3">

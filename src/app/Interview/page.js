@@ -424,7 +424,7 @@ const Interview = () => {
       // Start recognition when interview is active
       // Add small delay to avoid race conditions
       const timeoutId = setTimeout(() => {
-        if (recognitionRef.current && secondsLeft > 0 && !isSubmitted && !isPaused) {
+        if (recognitionRef.current && secondsLeft > 0 && !isSubmitted && !isPaused && !isRecognitionRunningRef.current) {
           try {
             recognitionRef.current.start();
             // onstart handler will set isListening and start time
@@ -438,13 +438,15 @@ const Interview = () => {
       return () => clearTimeout(timeoutId);
     } else {
       // Stop recognition when interview ends, is paused, or results are shown
-      try {
-        recognitionRef.current.stop();
-        isRecognitionRunningRef.current = false;
-        setIsListening(false);
-        console.log("Speech recognition stopped - interview ended or results shown");
-      } catch (e) {
-        // Not started, ignore
+      if (isRecognitionRunningRef.current) {
+        try {
+          recognitionRef.current.stop();
+          isRecognitionRunningRef.current = false;
+          setIsListening(false);
+          console.log("Speech recognition stopped - interview ended or results shown");
+        } catch (e) {
+          // Not started, ignore
+        }
       }
     }
   }, [isSubmitted, isPaused, secondsLeft]);
