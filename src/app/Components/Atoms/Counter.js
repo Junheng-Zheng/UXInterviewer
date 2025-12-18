@@ -1,9 +1,9 @@
 const Counter = ({ children, className, text, onMinus, onPlus }) => {
   return (
-    <div className="flex relative flex-col gap-2">
-      <p className="text-[12px] text-tertiary ">{text}</p>
+    <div className="flex text-xs relative flex-col gap-2">
+      <p className=" uppercase ">{text}</p>
       <div
-        className={`${className} flex gap-6  w-fit items-center border border-border rounded-full justify-center px-[16px] py-[12px]`}
+        className={`${className} flex gap-6  w-fit items-center border border-gray-200 rounded-full justify-center px-[16px] py-[12px]`}
       >
         <button
           onClick={onMinus}

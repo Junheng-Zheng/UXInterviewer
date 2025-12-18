@@ -42,6 +42,7 @@ export async function GET(request) {
       email: claims.email,
       name: claims.name || claims.email,
       email_verified: claims.email_verified,
+      idToken: tokenSet.id_token, // Store ID token for getting AWS credentials
     };
 
     // Create session

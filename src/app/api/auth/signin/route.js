@@ -39,6 +39,7 @@ export async function POST(request) {
       email: claims.email,
       name: claims.name || claims.email,
       email_verified: claims.email_verified,
+      idToken: result.idToken, // Store ID token for getting AWS credentials
     };
 
     // Create session
