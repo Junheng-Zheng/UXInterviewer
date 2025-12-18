@@ -1,9 +1,10 @@
+import Decryptedtext from "../UIComponents/Decryptedtext";
 const Counter = ({ children, className, text, onMinus, onPlus }) => {
   return (
-    <div className="flex text-xs relative flex-col gap-2">
+    <div className="flex text-xs relative  flex-col gap-2">
       <p className=" uppercase ">{text}</p>
       <div
-        className={`${className} flex gap-6  w-fit items-center border border-gray-200 rounded-full justify-center px-[16px] py-[12px]`}
+        className={`${className} flex justify-between  w-[128px] items-center border border-gray-200 rounded-full px-[16px] py-[12px]`}
       >
         <button
           onClick={onMinus}
@@ -11,6 +12,12 @@ const Counter = ({ children, className, text, onMinus, onPlus }) => {
         >
           <i className="fa-solid fa-minus"></i>
         </button>
+        {/* <Decryptedtext
+          text={`${children}`}
+          animateOn="view"
+          revealDirection="center"
+          speed={100}
+        /> */}
         {children}
         <button
           onClick={onPlus}

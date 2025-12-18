@@ -5,7 +5,7 @@ const Dropdown = ({ children, className, text, options }) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="flex text-xs relative flex-col gap-2">
-      <p className="uppercase ">{text}</p>
+      <p className="uppercase font-space-mono ">{text}</p>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`${className} active:scale-90 hover:scale-98 transition-all hover:bg-gray-50 relative gap-9 border border-gray-200 flex items-center justify-center cursor-pointer px-[16px] py-[12px] rounded-full `}

@@ -8,7 +8,7 @@ const Button = ({
 }) => {
   const variantClasses = {
     primary: "bg-orange-500 text-white",
-    secondary: "text-black border border-gray-200",
+    secondary: " border border-gray-200",
   };
 
   return (
