@@ -160,6 +160,12 @@ const Interview = () => {
       
       console.log("Screenshot captured successfully, base64 length:", screenshotBase64.length);
   
+      // Prepare excalidraw data for saving
+      const excalidrawDataToSave = {
+        elements,
+        appState: appState || {},
+      };
+  
       const response = await fetch("/api/grade-submission", {
         method: "POST",
         headers: {
@@ -170,6 +176,7 @@ const Interview = () => {
           target,
           tohelp,
           screenshot: screenshotBase64,
+          excalidrawData: excalidrawDataToSave,
           model: selectedModel,
         }),
       });
