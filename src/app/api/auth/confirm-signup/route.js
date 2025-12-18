@@ -23,29 +23,7 @@ export async function POST(request) {
     // Confirm sign up - use username (UUID) when email is alias
     await confirmSignUp(usernameToUse, code, !!username);
 
-    // If password is provided, sign in the user automatically
-    if (password) {
-      const result = await signIn(email, password);
-      
-      if (result.success) {
-        const claims = decodeToken(result.idToken);
-        const userInfo = {
-          sub: claims.sub,
-          email: claims.email,
-          name: claims.name || claims.email,
-          email_verified: claims.email_verified,
-        };
-
-        await setSession(userInfo);
-
-        return NextResponse.json({
-          success: true,
-          user: userInfo,
-          message: 'Email verified and signed in successfully',
-        });
-      }
-    }
-
+    // Always redirect to sign in after verification
     return NextResponse.json({
       success: true,
       message: 'Email verified successfully. Please sign in.',
