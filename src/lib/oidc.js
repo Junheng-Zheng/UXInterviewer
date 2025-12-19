@@ -63,7 +63,7 @@ export async function getAuthorizationUrl(state, nonce) {
     const oidcClient = await getOidcClient();
     
     const authUrl = oidcClient.authorizationUrl({
-      scope: 'openid email profile',
+      scope: 'openid email profile offline_access', // offline_access enables refresh tokens
       state,
       nonce,
     });

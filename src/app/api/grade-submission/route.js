@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSession } from '@/lib/session';
+import { getAWSCredentialsWithRefresh } from '@/lib/auth-helper';
+import { putItem } from '@/lib/dynamodb';
 
 // Get SYSTEM_PROMPT from environment variable
 const SYSTEM_PROMPT =
@@ -7,7 +10,7 @@ const SYSTEM_PROMPT =
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { design, target, tohelp, screenshot, excalidrawData, model = "gpt-4" } = body;
+    const { design, target, tohelp, screenshot, excalidrawData, model = "gpt-4", completionTimeSeconds, completionTimeMinutes } = body;
 
     // Check for screenshot (new method) or excalidrawData (old method)
     if (!design || !target || !tohelp) {
@@ -332,6 +335,84 @@ export async function POST(request) {
         },
         { status: 500 }
       );
+    }
+
+    // Save submission to DynamoDB after successful grading
+    try {
+      const session = await getSession();
+      
+      if (session && session.idToken) {
+        try {
+          // Get AWS credentials with automatic token refresh if needed
+          const { credentials } = await getAWSCredentialsWithRefresh();
+          
+          // Create unique submission ID
+          const submissionId = `submission-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+          const timestamp = new Date().toISOString();
+          
+          // Extract scores from evaluation object
+          // The evaluation has diagram_overall_score, technical_overall_score, etc.
+          const scores = {
+            diagramming: evaluation.diagram_overall_score ?? 0,
+            technical: evaluation.technical_overall_score ?? 0,
+            linguistics: evaluation.transcript_overall_score ?? 0,
+            overall: evaluation.overall_score ?? 0,
+          };
+          
+          // Extract breakdown from criteria (criteria contains diagramming, technical, linguistic arrays)
+          const breakdown = [];
+          if (evaluation.criteria) {
+            if (Array.isArray(evaluation.criteria.diagramming)) {
+              breakdown.push(...evaluation.criteria.diagramming.map(item => ({ ...item, category: 'diagramming' })));
+            }
+            if (Array.isArray(evaluation.criteria.technical)) {
+              breakdown.push(...evaluation.criteria.technical.map(item => ({ ...item, category: 'technical' })));
+            }
+            if (Array.isArray(evaluation.criteria.linguistic)) {
+              breakdown.push(...evaluation.criteria.linguistic.map(item => ({ ...item, category: 'linguistic' })));
+            }
+          }
+          
+          // Prepare submission item for DynamoDB
+          // Using PK/SK pattern for single-table design
+          const submissionItem = {
+            PK: `USER#${session.sub}`,  // Partition key
+            SK: `SUBMISSION#${submissionId}`,  // Sort key
+            userId: session.sub,  // Keep for filtering/access control
+            submissionId: submissionId,
+            timestamp: timestamp,
+            // Original submission data
+            design: design,
+            target: target,
+            tohelp: tohelp,
+            model: model,
+            // Completion time
+            completionTimeSeconds: completionTimeSeconds || null,
+            completionTimeMinutes: completionTimeMinutes || null,
+            // Evaluation results
+            evaluation: evaluation,
+            scores: scores,
+            breakdown: breakdown,
+            // Store excalidraw JSON data (not screenshot - too large for DynamoDB)
+            excalidrawData: excalidrawData ? JSON.stringify(excalidrawData) : null,
+            // Note: Screenshot is not stored in DynamoDB due to size limits (400KB max)
+            // Screenshot is only used for grading and not persisted
+          };
+          
+          // Save to DynamoDB
+          await putItem(credentials, submissionItem);
+          console.log(`Submission saved to DynamoDB: ${submissionId}`);
+        } catch (dbError) {
+          // Log error but don't fail the request - grading was successful
+          console.error("Error saving submission to DynamoDB:", dbError);
+          // Continue to return the evaluation even if DB save fails
+        }
+      } else {
+        console.log("No session found, skipping DynamoDB save");
+      }
+    } catch (sessionError) {
+      // Log error but don't fail the request - grading was successful
+      console.error("Error getting session for DynamoDB save:", sessionError);
     }
 
     return NextResponse.json(evaluation);

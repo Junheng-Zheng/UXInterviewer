@@ -5,7 +5,8 @@ import Button from "../Atoms/Button";
 import Percentagechart from "../Atoms/Percentagechart";
 import Listitem from "../Atoms/Listitem";
 import useStore from "../../../store/module";
-const Results = () => {
+
+const Results = ({ submissionData }) => {
   const design = useStore((state) => state.design);
   const target = useStore((state) => state.target);
   const tohelp = useStore((state) => state.tohelp);
@@ -13,6 +14,82 @@ const Results = () => {
   const screenshot = useStore((state) => state.screenshot);
   const [showJson, setShowJson] = useState(false);
   const [selectedSection, setSelectedSection] = useState('diagramming'); // 'diagramming', 'technical', or 'linguistic'
+  const [excalidrawData, setExcalidrawData] = useState(null);
+  const [generatedScreenshot, setGeneratedScreenshot] = useState(null);
+  const [isGeneratingScreenshot, setIsGeneratingScreenshot] = useState(false);
+
+  // Load excalidraw data and generate screenshot if viewing a submission
+  useEffect(() => {
+    const generateScreenshot = async () => {
+      if (!submissionData?.excalidrawData) {
+        return;
+      }
+
+      try {
+        setIsGeneratingScreenshot(true);
+        
+        // Parse the excalidraw data (it's stored as a JSON string)
+        const parsed = typeof submissionData.excalidrawData === 'string' 
+          ? JSON.parse(submissionData.excalidrawData)
+          : submissionData.excalidrawData;
+        
+        setExcalidrawData(parsed);
+
+        // Import exportToBlob dynamically
+        const excalidrawModule = await import("@excalidraw/excalidraw");
+        const { exportToBlob } = excalidrawModule;
+
+        if (!exportToBlob) {
+          console.error("exportToBlob not available");
+          return;
+        }
+
+        // Clean up appState to ensure it's compatible
+        const appState = parsed.appState || {};
+        const cleanedAppState = { ...appState };
+        
+        // Ensure collaborators is an array if it exists
+        if (cleanedAppState.collaborators !== undefined) {
+          cleanedAppState.collaborators = Array.isArray(cleanedAppState.collaborators)
+            ? cleanedAppState.collaborators
+            : [];
+        }
+        
+        // Remove problematic properties
+        delete cleanedAppState.collaboratorsMap;
+
+        // Generate screenshot from Excalidraw data
+        const blob = await exportToBlob({
+          elements: parsed.elements || [],
+          appState: {
+            ...cleanedAppState,
+            exportBackground: true,
+            exportWithDarkMode: false,
+          },
+          mimeType: "image/png",
+        });
+
+        // Convert blob to base64
+        const base64String = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result.split(",")[1]; // Remove data:image/png;base64, prefix
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        setGeneratedScreenshot(base64String);
+      } catch (e) {
+        console.error("Error generating screenshot from excalidraw data:", e);
+      } finally {
+        setIsGeneratingScreenshot(false);
+      }
+    };
+
+    generateScreenshot();
+  }, [submissionData]);
 
   // Debug: Log evaluation structure when it changes
   useEffect(() => {
@@ -22,6 +99,27 @@ const Results = () => {
       console.log("Overall assessment:", evaluation.summary?.overall_assessment);
     }
   }, [evaluation]);
+
+  // Format timestamp for display
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "Just Now";
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return "Just Now";
+      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      return date.toLocaleDateString();
+    } catch (e) {
+      return "Just Now";
+    }
+  };
 
   // Default values if evaluation is not loaded yet
   const overallScore = evaluation?.overall_score ?? 0;
@@ -99,7 +197,7 @@ const Results = () => {
                 <p>TO HELP {tohelp}</p>
               </div>
               <div className="flex text-tertiary gap-4">
-                <p>Just Now</p>
+                <p>{submissionData?.timestamp ? formatTimestamp(submissionData.timestamp) : "Just Now"}</p>
                 <p>Productivity</p>
                 <p>Easy</p>
                 <p>15 minutes</p>
@@ -225,9 +323,31 @@ const Results = () => {
                 />
               </div>
             </div>
+          ) : generatedScreenshot ? (
+            <div className="w-full h-full flex flex-col gap-4">
+              <h3 className="text-lg font-semibold">Submission Diagram</h3>
+              <div className="flex-1 w-full min-h-[400px] overflow-auto rounded-lg bg-gray-100 flex items-center justify-center p-4">
+                <img
+                  src={`data:image/png;base64,${generatedScreenshot}`}
+                  alt="Excalidraw submission diagram"
+                  className="max-w-full max-h-full object-contain shadow-lg"
+                  style={{ maxHeight: '600px' }}
+                />
+              </div>
+            </div>
+          ) : isGeneratingScreenshot ? (
+            <div className="w-full h-full flex flex-col gap-4">
+              <h3 className="text-lg font-semibold">Submission Diagram</h3>
+              <div className="flex-1 w-full min-h-[400px] overflow-auto rounded-lg bg-gray-100 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Generating diagram...</p>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="text-tertiary text-center flex items-center justify-center h-full w-full">
-              <p>No submission screenshot available</p>
+              <p>No submission data available</p>
             </div>
           )}
         </div>

@@ -35,40 +35,126 @@ const History = () => {
   const [selected, setSelected] = useState("All");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  /* -------------------- fetch submissions -------------------- */
+  useEffect(() => {
+    const fetchSubmissions = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Get current user
+        const userResponse = await fetch('/api/auth/me');
+        const userData = await userResponse.json();
+
+        if (!userData.authenticated || !userData.user?.sub) {
+          console.log("User not authenticated");
+          setSubmissions([]);
+          setLoading(false);
+          return;
+        }
+
+        // Query submissions for this user using PK/SK pattern
+        const queryResponse = await fetch('/api/dynamodb/query', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            partitionKey: 'PK',
+            partitionValue: `USER#${userData.user.sub}`,
+            options: {
+              sortKeyName: 'SK',
+              sortKeyCondition: 'begins_with(SK, :skPrefix)',
+              sortKeyValues: {
+                ':skPrefix': 'SUBMISSION#'
+              },
+            },
+          }),
+        });
+
+        const queryData = await queryResponse.json();
+
+        if (!queryData.success) {
+          throw new Error(queryData.error || 'Failed to fetch submissions');
+        }
+
+        // Transform DynamoDB items to display format
+        const transformedData = (queryData.items || [])
+          .filter(item => item.submissionId) // Only include actual submissions
+          .map(item => {
+            // Calculate average score from evaluation
+            const scores = item.scores || {};
+            const technical = scores.technical || 0;
+            const diagramming = scores.diagramming || 0;
+            const linguistics = scores.linguistics || 0;
+            const averageScore = Math.round((technical + diagramming + linguistics) / 3);
+
+            // Format date from timestamp
+            const date = item.timestamp 
+              ? new Date(item.timestamp).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0];
+
+            // Create description from design challenge
+            const description = item.design && item.target && item.tohelp
+              ? `Design ${item.design} for ${item.target} to help ${item.tohelp}`
+              : "UX Design Submission";
+
+            // Determine category (could be enhanced based on design type)
+            const category = item.design?.toLowerCase().includes('redesign') 
+              ? "Redesign" 
+              : "New Feature";
+
+            // Format completion time
+            const formatCompletionTime = (seconds) => {
+              if (!seconds && seconds !== 0) return "N/A";
+              const mins = Math.floor(seconds / 60);
+              const secs = seconds % 60;
+              if (mins > 0) {
+                return `${mins}m ${secs}s`;
+              }
+              return `${secs}s`;
+            };
+
+            return {
+              submissionId: item.submissionId,
+              description: description,
+              grade: averageScore.toString(),
+              date: date,
+              category: category,
+              timeLimit: formatCompletionTime(item.completionTimeSeconds), // Show completion time
+              difficulty: "Medium", // Default, could be enhanced
+              reference: `/submission/${item.submissionId}`, // Link to view details
+              actions: "View",
+              // Store full item for potential detail view
+              fullItem: item,
+            };
+          })
+          // Sort by timestamp descending (newest first)
+          .sort((a, b) => {
+            const dateA = new Date(a.fullItem?.timestamp || 0);
+            const dateB = new Date(b.fullItem?.timestamp || 0);
+            return dateB - dateA;
+          });
+
+        setSubmissions(transformedData);
+      } catch (err) {
+        console.error('Error fetching submissions:', err);
+        setError(err.message || 'Failed to load submissions');
+        setSubmissions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubmissions();
+  }, []);
 
   /* -------------------- data -------------------- */
-  const data = [
-    {
-      description: "Design a new feature for the app",
-      grade: "41",
-      date: "2025-01-01",
-      category: "New Feature",
-      timeLimit: "10 minutes",
-      difficulty: "Easy",
-      reference: "https://www.google.com",
-      actions: "View",
-    },
-    {
-      description: "Redesign the onboarding flow",
-      grade: "78",
-      date: "2025-01-03",
-      category: "Redesign",
-      timeLimit: "15 minutes",
-      difficulty: "Medium",
-      reference: "https://www.google.com",
-      actions: "View",
-    },
-    ...Array.from({ length: 9 }).map(() => ({
-      description: "Design a new feature for the app",
-      grade: "41",
-      date: "2025-01-01",
-      category: "New Feature",
-      timeLimit: "10 minutes",
-      difficulty: "Easy",
-      reference: "https://www.google.com",
-      actions: "View",
-    })),
-  ];
+  const data = submissions;
 
   /* -------------------- filtering + pagination -------------------- */
 
@@ -132,8 +218,15 @@ const History = () => {
 
       {/* table */}
       <div className="flex flex-col gap-3 text-xs">
-        {filtered.length === 0 ? (
-          <div className="py-8 text-gray-500 text-center">No results found</div>
+        {loading ? (
+          <div className="py-8 text-gray-500 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+            Loading submissions...
+          </div>
+        ) : error ? (
+          <div className="py-8 text-red-500 text-center">Error: {error}</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-8 text-gray-500 text-center">No submissions found</div>
         ) : (
           <>
             <div>{filtered.length} results found</div>
@@ -149,9 +242,9 @@ const History = () => {
               <p className="w-full">Feedback</p>
             </div>
 
-            {paginated.map((item, index) => (
+            {paginated.map((item) => (
               <div
-                key={index}
+                key={item.submissionId || `submission-${item.date}-${item.description}`}
                 className="flex border-b-[0.5px] border-gray-200 gap-6 px-4 pb-3 items-center"
               >
                 <p className="w-full line-clamp-1">{item.description}</p>
@@ -188,7 +281,7 @@ const History = () => {
                   {item.difficulty}
                 </div>
 
-                <p className="w-full">{item.reference}</p>
+                <p className="w-full truncate">{item.reference}</p>
 
                 <div className="w-full">
                   <Link
