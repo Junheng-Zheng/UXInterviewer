@@ -208,8 +208,13 @@ const Whiteboard = () => {
       {/* footer */}
       <div className="flex justify-between items-end">
         <div className="flex flex-col gap-3">
-          <p className="uppercase font-space-grotesk">Interviewer Settings</p>
-
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-gear"></i>
+            <p className="uppercase font-semibold font-space-grotesk">
+              Interviewer Settings
+            </p>
+          </div>
+          <div className="w-full bg-gray-200 h-[1px]"></div>
           <div className="flex gap-2 items-end">
             <Dropdown
               text="Talking Speed"
@@ -234,14 +239,37 @@ const Whiteboard = () => {
             <Button icon="fa-solid fa-lock">Test Voice</Button>
           </div>
         </div>
+        <div className="flex gap-3 items-end">
+          <div className="flex gap-2 items-end">
+            <Dropdown
+              text="Input"
+              options={[
+                { label: "Design", value: "design" },
+                { label: "Target", value: "target" },
+                { label: "Tohelp", value: "tohelp" },
+              ]}
+            >
+              Text
+            </Dropdown>
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex px-6 py-4 rounded-full bg-orange-500 text-white gap-2 font-space-grotesk"
-        >
-          Start Interview
-          <i className="fa-solid fa-play" />
-        </button>
+            <Dropdown
+              text="Output"
+              options={[
+                { label: "Kolbe Yang", value: "kolbe" },
+                { label: "Alex Chen", value: "alex" },
+              ]}
+            >
+              Speech
+            </Dropdown>
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex px-6 py-4 rounded-full bg-orange-500 items-center cursor-pointer hover:scale-98 transition-all duration-300 active:scale-90 text-white gap-2 font-space-grotesk"
+          >
+            Start Interview
+            <i className="fa-solid fa-play" />
+          </button>
+        </div>
       </div>
     </div>
   );
