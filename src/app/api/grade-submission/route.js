@@ -10,7 +10,7 @@ const SYSTEM_PROMPT =
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { design, target, tohelp, screenshot, excalidrawData, model = "gpt-4" } = body;
+    const { design, target, tohelp, screenshot, excalidrawData, model = "gpt-4", completionTimeSeconds, completionTimeMinutes } = body;
 
     // Check for screenshot (new method) or excalidrawData (old method)
     if (!design || !target || !tohelp) {
@@ -386,6 +386,9 @@ export async function POST(request) {
             target: target,
             tohelp: tohelp,
             model: model,
+            // Completion time
+            completionTimeSeconds: completionTimeSeconds || null,
+            completionTimeMinutes: completionTimeMinutes || null,
             // Evaluation results
             evaluation: evaluation,
             scores: scores,

@@ -44,6 +44,7 @@ const Interview = () => {
   const isSubmittedRef = useRef(false);
   const isPausedRef = useRef(false);
   const secondsLeftRef = useRef(secondsLeft);
+  const interviewStartTimeRef = useRef(null); // Track when interview started
 
   const excalidrawRef = useRef(null);
   const excalidrawAPIRef = useRef(null);
@@ -160,6 +161,12 @@ const Interview = () => {
       
       console.log("Screenshot captured successfully, base64 length:", screenshotBase64.length);
   
+      // Calculate completion time (time taken to complete the submission)
+      // Use timer-based calculation: initial time - remaining time = time used
+      const initialTimeSeconds = timeValue * 60;
+      const completionTimeSeconds = initialTimeSeconds - secondsLeft;
+      const completionTimeMinutes = Math.floor(completionTimeSeconds / 60);
+      
       // Prepare excalidraw data for saving
       const excalidrawDataToSave = {
         elements,
@@ -178,6 +185,8 @@ const Interview = () => {
           screenshot: screenshotBase64,
           excalidrawData: excalidrawDataToSave,
           model: selectedModel,
+          completionTimeSeconds: completionTimeSeconds,
+          completionTimeMinutes: completionTimeMinutes,
         }),
       });
   
@@ -264,6 +273,10 @@ const Interview = () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSecondsLeft(timeValue * 60);
     setWarning(false);
+    // Track when interview starts (when timer is initialized)
+    if (!interviewStartTimeRef.current) {
+      interviewStartTimeRef.current = Date.now();
+    }
   }, [timeValue]);
 
   // TIMER

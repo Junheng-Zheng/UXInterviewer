@@ -108,13 +108,24 @@ const History = () => {
               ? "Redesign" 
               : "New Feature";
 
+            // Format completion time
+            const formatCompletionTime = (seconds) => {
+              if (!seconds && seconds !== 0) return "N/A";
+              const mins = Math.floor(seconds / 60);
+              const secs = seconds % 60;
+              if (mins > 0) {
+                return `${mins}m ${secs}s`;
+              }
+              return `${secs}s`;
+            };
+
             return {
               submissionId: item.submissionId,
               description: description,
               grade: averageScore.toString(),
               date: date,
               category: category,
-              timeLimit: "N/A", // Not stored in submission
+              timeLimit: formatCompletionTime(item.completionTimeSeconds), // Show completion time
               difficulty: "Medium", // Default, could be enhanced
               reference: `/submission/${item.submissionId}`, // Link to view details
               actions: "View",
