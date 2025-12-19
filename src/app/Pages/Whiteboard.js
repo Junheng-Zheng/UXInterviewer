@@ -152,11 +152,13 @@ const Whiteboard = () => {
             <button
               key={cat}
               onClick={() => setSelected(cat)}
-              className={`uppercase flex flex-col gap-2 font-space-mono ${
+              className={`uppercase group flex flex-col gap-2 font-space-mono ${
                 selected === cat ? "text-orange-600" : ""
               }`}
             >
-              <span>{cat}</span>
+              <span className="group-hover:-translate-y-1 transition-all duration-300">
+                {cat}
+              </span>
               {selected === cat && (
                 <div className="w-full h-px bg-orange-600" />
               )}
