@@ -6,9 +6,10 @@ import Button from "../Components/Atoms/Button";
 import Counter from "../Components/Atoms/Counter";
 import Dropdown from "../Components/Molecules/Dropdown";
 import Decryptedtext from "../Components/UIComponents/Decryptedtext";
+
 const Whiteboard = () => {
   const [showModal, setShowModal] = useState(false);
-  const [selected, setSelected] = useState("EASY");
+  const [selected, setSelected] = useState("Easy");
 
   /* ---------- store ---------- */
   const design = useStore((s) => s.design);
@@ -24,59 +25,101 @@ const Whiteboard = () => {
   /* ---------- local state ---------- */
   const [reloadRotation, setReloadRotation] = useState(0);
 
-  /* ---------- challenge pools ---------- */
-  const designPool = [
-    "a FAQ page",
-    "a landing page",
-    "a product page",
-    "a dashboard page",
-    "a settings page",
-  ];
+  /* ---------- pools ---------- */
+  const [pools, setPools] = useState({
+    design: {},
+    target: {},
+    tohelp: {},
+  });
 
-  const targetPool = [
-    "a finance tracking app",
-    "a fitness tracking app",
-    "a productivity app",
-    "a notes app",
-  ];
+  /* ---------- load CSV ---------- */
+  useEffect(() => {
+    fetch("/csv/challenges.csv")
+      .then((res) => {
+        if (!res.ok) throw new Error("CSV not found");
+        return res.text();
+      })
+      .then((text) => {
+        const lines = text.trim().split(/\r?\n/).slice(1);
 
-  const tohelpPool = [
-    "accountants",
-    "fitness trainers",
-    "students",
-    "product managers",
-  ];
+        const grouped = { design: {}, target: {}, tohelp: {} };
+
+        lines.forEach((line) => {
+          if (!line.trim()) return;
+
+          const [type, difficulty, domain, ...rest] = line.split(",");
+          const value = rest.join(",").trim();
+          const domains = domain.split("|");
+
+          grouped[type] ??= {};
+          grouped[type][difficulty] ??= {};
+
+          domains.forEach((d) => {
+            grouped[type][difficulty][d] ??= [];
+            grouped[type][difficulty][d].push(value);
+          });
+        });
+
+        setPools(grouped);
+      })
+      .catch(console.error);
+  }, []);
+
+  /* ---------- helpers ---------- */
+  const randomFrom = (arr, prev) => {
+    if (!arr || arr.length === 0) return null;
+    if (arr.length === 1) return arr[0];
+
+    let next;
+    do {
+      next = arr[Math.floor(Math.random() * arr.length)];
+    } while (next === prev);
+
+    return next;
+  };
+
+  const getSharedDomains = (difficulty) => {
+    const d = Object.keys(pools.design[difficulty] || {});
+    const t = Object.keys(pools.target[difficulty] || {});
+    const h = Object.keys(pools.tohelp[difficulty] || {});
+
+    return d.filter((domain) => t.includes(domain) && h.includes(domain));
+  };
 
   /* ---------- actions ---------- */
   const reloadChallenge = () => {
-    setDesign(designPool[Math.floor(Math.random() * designPool.length)]);
-    setTarget(targetPool[Math.floor(Math.random() * targetPool.length)]);
-    setTohelp(tohelpPool[Math.floor(Math.random() * tohelpPool.length)]);
+    const domains = getSharedDomains(selected);
+    if (!domains.length) return;
+
+    const domain = domains[Math.floor(Math.random() * domains.length)];
+
+    const d = pools.design[selected][domain];
+    const t = pools.target[selected][domain];
+    const h = pools.tohelp[selected][domain];
+
+    setDesign(randomFrom(d, design));
+    setTarget(randomFrom(t, target));
+    setTohelp(randomFrom(h, tohelp));
   };
 
+  /* ---------- auto reload ---------- */
   useEffect(() => {
-    reloadChallenge();
-  }, []);
+    if (pools.design[selected]) {
+      reloadChallenge();
+    }
+  }, [selected, pools]);
 
   /* ---------- render ---------- */
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex z-2 flex-col gap-8">
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10">
-          {/* backdrop */}
           <button
-            className="absolute inset-0 cursor-pointer"
+            className="absolute inset-0"
             onClick={() => setShowModal(false)}
           />
 
-          {/* modal */}
-          <div className="w-[400px] z-50 flex flex-col gap-4 p-6 rounded-[12px] bg-white">
-            <div className="text-[32px] shoulder flex flex-col gap-1 font-bold leading-[34px] tracking-[-0.8px]">
-              <p>DESIGN {design}</p>
-              <p>FOR {target}</p>
-              <p>TO HELP {tohelp}</p>
-            </div>
-
+          <div className="w-[400px] z-50 flex flex-col gap-4 p-6 rounded-[24px] bg-white">
             <Link href="/Interview">
               <Button
                 variant="primary"
@@ -88,7 +131,7 @@ const Whiteboard = () => {
             </Link>
 
             <button
-              className=" text-xs hover:scale-95 transition-all"
+              className="text-xs hover:scale-95 transition-all"
               onClick={() => setShowModal(false)}
             >
               Close
@@ -96,19 +139,35 @@ const Whiteboard = () => {
           </div>
         </div>
       )}
-      {/* header */}
-      <div className="flex items-center gap-2">
-        <i className="fa-solid fa-pencil" />
-        <p className="font-medium uppercase">Whiteboard</p>
-      </div>
 
       <div className="flex flex-col gap-6 p-8 relative">
-        <div className="absolute top-0 left-0 border-l border-t border-gray-300 w-[24px]  aspect-square "></div>
-        <div className="absolute top-0 right-0 border-r border-t border-gray-300 w-[24px]  aspect-square "></div>
-        <div className="absolute bottom-0 left-0 border-l border-b border-gray-300 w-[24px]  aspect-square "></div>
-        <div className="absolute bottom-0 right-0 border-r border-b border-gray-300 w-[24px]  aspect-square "></div>
+        <div className="absolute top-0 left-0 border-l border-t border-gray-300 w-[24px] aspect-square" />
+        <div className="absolute top-0 right-0 border-r border-t border-gray-300 w-[24px] aspect-square" />
+        <div className="absolute bottom-0 left-0 border-l border-b border-gray-300 w-[24px] aspect-square" />
+        <div className="absolute bottom-0 right-0 border-r border-b border-gray-300 w-[24px] aspect-square" />
+
+        {/* difficulty */}
+        <div className="flex border-b border-gray-200 text-xs gap-4">
+          {["Easy", "Medium", "Hard"].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelected(cat)}
+              className={`uppercase group flex flex-col gap-2 font-space-mono ${
+                selected === cat ? "text-orange-600" : ""
+              }`}
+            >
+              <span className="group-hover:-translate-y-1 transition-all duration-300">
+                {cat}
+              </span>
+              {selected === cat && (
+                <div className="w-full h-px bg-orange-600" />
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* controls */}
-        <div className="flex flex-wrap items-end gap-3 text-xs">
+        <div className="flex gap-3 items-end">
           <Button
             onClick={() => {
               reloadChallenge();
@@ -116,90 +175,42 @@ const Whiteboard = () => {
             }}
           >
             <i
-              className="fa-solid fa-refresh transition-all duration-300"
+              className="fa-solid fa-refresh transition-all"
               style={{ transform: `rotate(${reloadRotation}deg)` }}
             />
             Refresh Challenge
           </Button>
 
-          <Dropdown
-            text="Category"
-            options={[{ label: "UI/UX", value: "uiux" }]}
+          <Counter
+            onMinus={() => setTime(Math.max(5, time - 5))}
+            onPlus={() => setTime(time + 5)}
           >
-            UI/UX
-          </Dropdown>
-
-          {/* <Dropdown
-            text="Difficulty"
-            options={[
-              { label: "Easy", value: "easy" },
-              { label: "Medium", value: "medium" },
-              { label: "Hard", value: "hard" },
-            ]}
-          >
-            Medium
-          </Dropdown> */}
-          <div className="flex pb-3 border-b-[0.5px] border-gray-200 text-xs gap-4">
-            {["All", "New Feature", "Redesign"].map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelected(cat)}
-                className={`uppercase relative ${
-                  selected === cat ? "text-orange-600" : ""
-                }`}
-              >
-                {cat}
-                {selected === cat && (
-                  <div className="absolute bottom-0 left-0 w-full h-px translate-y-3 bg-orange-600" />
-                )}
-              </button>
-            ))}
-          </div>
+            {time} min
+          </Counter>
         </div>
 
-        {/* challenge text */}
-        <div className="text-[48px] shoulder flex flex-col gap-1 font-bold leading-[48px] tracking-[-0.8px]">
-          <div className="pb-3 border-b border-gray-200">
-            <Decryptedtext
-              text={`DESIGN ${design}`}
-              animateOn="view"
-              revealDirection="center"
-              speed={100}
-            />
+        {/* challenge */}
+        {design && target && tohelp && (
+          <div className="text-[48px] shoulder flex flex-col gap-3 font-bold leading-[48px]">
+            <div className="pb-3 border-b border-gray-200">
+              <Decryptedtext text={`DESIGN ${design}`} animateOn="view" />
+            </div>
+            <div className="pb-3 border-b border-gray-200">
+              <Decryptedtext text={`FOR ${target}`} animateOn="view" />
+            </div>
+            <div className="pb-3 border-b border-gray-200">
+              <Decryptedtext text={`TO HELP ${tohelp}`} animateOn="view" />
+            </div>
           </div>
-          <div className="pb-3 border-b border-gray-200">
-            <Decryptedtext
-              text={`FOR ${target}`}
-              animateOn="view"
-              revealDirection="center"
-              speed={100}
-            />
-          </div>
-          <div className="pb-3 border-b border-gray-200">
-            <Decryptedtext
-              text={`TO HELP ${tohelp}`}
-              animateOn="view"
-              revealDirection="center"
-              speed={100}
-            />
-          </div>
-        </div>
-
-        <p className="text-xs">[EXPECTED TIME NEEDED] {time} Minutes</p>
+        )}
       </div>
 
       {/* footer */}
-      <div className="flex justify-between items-center">
-        {/* LEFT — Interviewer settings */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            <i className="fa-solid fa-gear" />
-            <p className="font-medium uppercase">INTERVIEWER SETTINGS</p>
-          </div>
+      <div className="flex justify-between items-end">
+        <div className="flex flex-col gap-3">
+          <p className="uppercase font-space-grotesk">Interviewer Settings</p>
 
-          <div className="w-full bg-gray-100 h-px" />
-
-          <div className="flex text-xs items-end gap-2">
+          <div className="flex gap-2 items-end">
             <Dropdown
               text="Talking Speed"
               options={[
@@ -220,49 +231,17 @@ const Whiteboard = () => {
             >
               Kolbe Yang
             </Dropdown>
-
             <Button icon="fa-solid fa-lock">Test Voice</Button>
           </div>
         </div>
 
-        {/* RIGHT — Interview controls */}
-        <div className="flex items-center gap-2">
-          <Counter
-            text="Time Limit"
-            onMinus={() => setTime(Math.max(5, time - 5))}
-            onPlus={() => setTime(time + 5)}
-          >
-            {time} min
-          </Counter>
-          <Dropdown
-            text="Input"
-            options={[
-              { label: "Text", value: "text" },
-              { label: "Voice", value: "voice" },
-            ]}
-          >
-            Text
-          </Dropdown>
-
-          <Dropdown
-            text="Output"
-            options={[
-              { label: "Text", value: "text" },
-              { label: "Voice", value: "voice" },
-            ]}
-          >
-            Voice
-          </Dropdown>
-
-          {/* Start Interview */}
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex px-6 py-4 rounded-full text-white bg-orange-500 items-center gap-2"
-          >
-            Start Interview
-            <i className="fa-solid fa-play" />
-          </button>
-        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex px-6 py-4 rounded-full bg-orange-500 text-white gap-2 font-space-grotesk"
+        >
+          Start Interview
+          <i className="fa-solid fa-play" />
+        </button>
       </div>
     </div>
   );

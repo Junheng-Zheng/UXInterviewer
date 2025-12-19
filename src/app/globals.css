@@ -95,3 +95,21 @@ body {
   border: none !important;
   box-shadow: none !important;
 }
+
+.font-space-mono {
+  font-family: var(--font-space-mono);
+}
+
+.font-space-grotesk {
+  font-family: var(--font-space-grotesk);
+}
+
+.bg-grid {
+  background-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.02) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
