@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { exchangeCodeForTokens } from '@/lib/oidc';
 import { setSession } from '@/lib/session';
 import { cookies } from 'next/headers';
+import { getAndClearReturnUrl } from '@/lib/auth-redirect';
 
 /**
  * Callback route - handles OIDC redirect from Cognito
@@ -53,8 +54,12 @@ export async function GET(request) {
     cookieStore.delete('oauth_state');
     cookieStore.delete('oauth_nonce');
 
-    // Redirect to home page
-    return NextResponse.redirect(new URL('/', request.url));
+    // Get return URL if user was redirected here due to token expiration
+    const returnUrl = await getAndClearReturnUrl();
+    const redirectUrl = returnUrl || '/';
+
+    // Redirect to return URL or home page
+    return NextResponse.redirect(new URL(redirectUrl, request.url));
   } catch (error) {
     console.error('Callback error:', error);
     return NextResponse.redirect(new URL('/?error=callback_failed', request.url));

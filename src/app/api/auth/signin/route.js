@@ -45,6 +45,10 @@ export async function POST(request) {
     // Create session
     await setSession(userInfo);
 
+    // Note: Return URL is handled client-side via query params and sessionStorage
+    // We don't use the cookie return URL here because it might contain API endpoint URLs
+    // instead of the actual page URL
+
     return NextResponse.json({
       success: true,
       user: userInfo,

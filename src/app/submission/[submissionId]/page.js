@@ -58,6 +58,20 @@ const SubmissionDetailPage = () => {
           }),
         });
 
+        // Check for auth errors before parsing JSON
+        if (getResponse.status === 401) {
+          const authData = await getResponse.json();
+          if (authData.requiresAuth || authData.redirectTo) {
+            // Store current path for redirect after login
+            if (typeof window !== 'undefined') {
+              const returnUrl = window.location.pathname + window.location.search;
+              const loginUrl = authData.redirectTo || '/Signin';
+              window.location.href = `${loginUrl}${loginUrl.includes('?') ? '&' : '?'}returnUrl=${encodeURIComponent(returnUrl)}`;
+            }
+            return;
+          }
+        }
+
         const getData = await getResponse.json();
 
         if (!getData.success || !getData.item) {

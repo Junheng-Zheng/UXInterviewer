@@ -39,10 +39,18 @@ export async function getAWSCredentialsWithRefresh() {
       }
     } catch (error) {
       console.error('Token refresh failed:', error);
-      throw new Error('Token expired and refresh failed. Please sign in again.');
+      // Create a custom error that includes redirect information
+      const authError = new Error('Token expired and refresh failed. Please sign in again.');
+      authError.code = 'TOKEN_EXPIRED';
+      authError.requiresAuth = true;
+      throw authError;
     }
   } else if (isTokenExpired(idToken)) {
-    throw new Error('Token expired and no refresh token available. Please sign in again.');
+    // Create a custom error that includes redirect information
+    const authError = new Error('Token expired and no refresh token available. Please sign in again.');
+    authError.code = 'TOKEN_EXPIRED';
+    authError.requiresAuth = true;
+    throw authError;
   }
 
   // Get AWS credentials with the (possibly refreshed) token

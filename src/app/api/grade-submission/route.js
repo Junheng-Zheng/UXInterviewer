@@ -405,6 +405,14 @@ export async function POST(request) {
         } catch (dbError) {
           // Log error but don't fail the request - grading was successful
           console.error("Error saving submission to DynamoDB:", dbError);
+          
+          // If it's a token expiration error, note that the next API call will trigger the redirect
+          // Note: We don't return an error here because grading was successful
+          // The client will get the evaluation, but the DB save failed
+          // The next API call will trigger the redirect, and the client will handle storing the return URL
+          if (dbError.code === 'TOKEN_EXPIRED' || dbError.requiresAuth || dbError.message?.includes('Token expired')) {
+            // Client-side code will handle storing the return URL when it detects the 401
+          }
           // Continue to return the evaluation even if DB save fails
         }
       } else {
