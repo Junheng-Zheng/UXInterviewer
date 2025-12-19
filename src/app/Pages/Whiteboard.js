@@ -139,8 +139,7 @@ const Whiteboard = () => {
           </div>
         </div>
       )}
-
-      <div className="flex flex-col gap-6 p-8 relative">
+      <div className="flex flex-col gap-6 p-7 relative">
         <div className="absolute top-0 left-0 border-l border-t border-gray-300 w-[24px] aspect-square" />
         <div className="absolute top-0 right-0 border-r border-t border-gray-300 w-[24px] aspect-square" />
         <div className="absolute bottom-0 left-0 border-l border-b border-gray-300 w-[24px] aspect-square" />
