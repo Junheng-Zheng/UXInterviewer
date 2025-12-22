@@ -21,28 +21,35 @@ export async function getAWSCredentialsWithRefresh() {
   // Check if token needs refresh
   if (isTokenExpired(idToken) && session.refreshToken) {
     try {
-      console.log('Token expired, refreshing...');
       const refreshed = await refreshIdToken(session.refreshToken);
       
       if (refreshed && refreshed.idToken) {
         idToken = refreshed.idToken;
         
-        // Update session with new token
+        // Update session with new token and refresh token (if new one provided)
         updatedSession = {
           ...session,
           idToken: refreshed.idToken,
+          refreshToken: refreshed.refreshToken || session.refreshToken, // Keep refresh token updated
         };
         
-        // Save updated session
+        // Save updated session (refresh token will be stored in separate cookie)
         await setSession(updatedSession);
-        console.log('Token refreshed successfully');
       }
     } catch (error) {
       console.error('Token refresh failed:', error);
-      throw new Error('Token expired and refresh failed. Please sign in again.');
+      // Create a custom error that includes redirect information
+      const authError = new Error('Token expired and refresh failed. Please sign in again.');
+      authError.code = 'TOKEN_EXPIRED';
+      authError.requiresAuth = true;
+      throw authError;
     }
   } else if (isTokenExpired(idToken)) {
-    throw new Error('Token expired and no refresh token available. Please sign in again.');
+    // Create a custom error that includes redirect information
+    const authError = new Error('Token expired and no refresh token available. Please sign in again.');
+    authError.code = 'TOKEN_EXPIRED';
+    authError.requiresAuth = true;
+    throw authError;
   }
 
   // Get AWS credentials with the (possibly refreshed) token

@@ -40,10 +40,15 @@ export async function POST(request) {
       name: claims.name || claims.email,
       email_verified: claims.email_verified,
       idToken: result.idToken, // Store ID token for getting AWS credentials
+      refreshToken: result.refreshToken, // Store refresh token for token renewal
     };
 
     // Create session
     await setSession(userInfo);
+
+    // Note: Return URL is handled client-side via query params and sessionStorage
+    // We don't use the cookie return URL here because it might contain API endpoint URLs
+    // instead of the actual page URL
 
     return NextResponse.json({
       success: true,

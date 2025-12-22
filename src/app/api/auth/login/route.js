@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server';
 import { getAuthorizationUrl } from '@/lib/oidc';
 import { randomBytes } from 'crypto';
 import { cookies } from 'next/headers';
+import { setReturnUrl } from '@/lib/auth-redirect';
 
 /**
  * Login route - redirects to Cognito authorization endpoint
  */
-export async function GET() {
+export async function GET(request) {
   try {
+    // Get return URL from query parameter if provided
+    const { searchParams } = new URL(request.url);
+    const returnUrl = searchParams.get('returnUrl');
+    
+    // Store return URL if provided
+    if (returnUrl) {
+      await setReturnUrl(returnUrl);
+    }
+
     // Generate state and nonce for security
     const state = randomBytes(32).toString('hex');
     const nonce = randomBytes(32).toString('hex');

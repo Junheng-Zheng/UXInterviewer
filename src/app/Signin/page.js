@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getAndClearReturnUrl } from "@/lib/client-auth";
 
 const SignIn = () => {
   const [email, setEmail] = useState("");
@@ -10,6 +11,15 @@ const SignIn = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Store return URL from query params in sessionStorage on mount
+  useEffect(() => {
+    const returnUrl = searchParams.get('returnUrl');
+    if (returnUrl && typeof window !== 'undefined') {
+      sessionStorage.setItem('auth_return_url', returnUrl);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,8 +43,10 @@ const SignIn = () => {
         return;
       }
 
-      // Success - redirect to home
-      router.push("/");
+      // Success - redirect to return URL from query params, sessionStorage, or home
+      // Priority: query params > sessionStorage > home
+      const returnUrl = searchParams.get('returnUrl') || getAndClearReturnUrl();
+      router.push(returnUrl || "/");
     } catch (err) {
       console.error("Sign in error:", err);
       setError("An unexpected error occurred");
