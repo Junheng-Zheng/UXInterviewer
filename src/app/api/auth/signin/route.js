@@ -40,6 +40,7 @@ export async function POST(request) {
       name: claims.name || claims.email,
       email_verified: claims.email_verified,
       idToken: result.idToken, // Store ID token for getting AWS credentials
+      refreshToken: result.refreshToken, // Store refresh token for token renewal
     };
 
     // Create session
