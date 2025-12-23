@@ -72,7 +72,7 @@ TODO
 - [ ] Add system architecture to README
 
 
-See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of upcoming features.
+See the [open issues](https://github.com/Junheng-Zheng/UXInterviewer/issues) for a full list of upcoming features.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
