@@ -18,7 +18,7 @@
   <h3 align="center">UI Interviewer</h3>
 
   <p align="center">
-    The First Structured Interview Prep Platform foro UI/UX Designers.
+    The First Structured Interview Prep Platform for UI/UX Designers.
     <br />
     
   </p>
@@ -27,7 +27,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+<!-- [![Product Name Screen Shot][product-screenshot]](https://example.com) -->
 There are many interview prep resources for software engineers out there on the web—the most notorious being LeetCode; however, while software engineers can practice active recall for technical interiviews doing DSA problems, there is no real way to practice retrieval of UI/UX design principles in preperation for design interviews. So we decided to make it. The First Structured Interview Prep Platform for UI/UX Design.
 
 Here are the planned features:
