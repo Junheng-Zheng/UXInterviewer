@@ -35,7 +35,7 @@ Here are the planned features:
 * Draw diagrams for the given problem using Excalidraw
 * Have a conversation with an AI interviewer real-time about constraints and the general deisgn process
 * Receive rubric based scoring that evaluates user transcripts, diagramming, and task/constraint alignment
-* View stats on probelms solves, daily activity, etc.
+* View stats on problems solved, daily activity, etc.
 
 We are still early in the development process and are currently focused on flushing out the main MVP. More features will surface as we go through development which wil be queued for after the MVP is complete.
 
