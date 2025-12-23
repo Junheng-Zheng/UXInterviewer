@@ -41,7 +41,7 @@ We are still early in the development process and are currently focused on flush
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-### Built With
+## Built With
 
 The application is hosted on Vercel and built with Next.js (React). Authentication and identity management are handled by AWS Cognito, with DynamoDB and S3 used for user data storage.
 
@@ -55,18 +55,18 @@ The application is hosted on Vercel and built with Next.js (React). Authenticati
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-### System Architecture
+## System Architecture
 TODO
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ROADMAP -->
 ## Roadmap
-**Development**
+### Development
 - [ ] Add real-time AI interviewer
 - [ ] Finish frontend for settings page
 - [ ] Design/Implement landing page
 
-**Documentation**
+### Documentation
 - [ ] Add Changelog
 - [ ] Populate Github Issues
 - [ ] Add system architecture to README
