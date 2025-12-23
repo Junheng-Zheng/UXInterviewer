@@ -27,7 +27,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-<!-- [![Product Name Screen Shot][product-screenshot]](https://example.com) -->
+[![Product Name Screen Shot][product-screenshot]](https://example.com)
 There are many interview prep resources for software engineers out there on the web—the most notorious being LeetCode; however, while software engineers can practice active recall for technical interiviews doing DSA problems, there is no real way to practice retrieval of UI/UX design principles in preperation for design interviews. So we decided to make it. The First Structured Interview Prep Platform for UI/UX Design.
 
 Here are the planned features:
@@ -90,7 +90,7 @@ Project Link: [To be added]()
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
-[product-screenshot]: images/screenshot.png
+[product-screenshot]: https://cdn-images-1.medium.com/v2/resize:fit:1600/1*EL3Rxn7OvUwWjanhrEbMaw.png
 [Gpt]: https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&style=for-the-badge&logoColor=white
 [Gpt-url]: https://chatgpt.com
 [Vercel]: https://img.shields.io/badge/Vercel-%23000000.svg?logo=vercel&style=for-the-badge&logoColor=white
