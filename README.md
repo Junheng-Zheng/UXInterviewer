@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+<a id="readme-top"></a>
+<!--
+*** Thanks for checking out the Best-README-Template. If you have a suggestion
+*** that would make this better, please fork the repo and create a pull request
+*** or simply open an issue with the tag "enhancement".
+*** Don't forget to give the project a star!
+*** Thanks again! Now go create something AMAZING! :D
+-->
 
-## Getting Started
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <!-- <a href="https://github.com/othneildrew/Best-README-Template">
+    <img src="images/logo.png" alt="Logo" width="80" height="80">
+  </a> -->
 
-First, run the development server:
+  <h3 align="center">UI Interviewer</h3>
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+  <p align="center">
+    The First Structured Interview Prep Platform foro UI/UX Designers.
+    <br />
+    
+  </p>
+</div>
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+<!-- ABOUT THE PROJECT -->
+## About The Project
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+[![Product Name Screen Shot][product-screenshot]](https://example.com)
+There are many interview prep resources for software engineers out there on the web—the most notorious being LeetCode; however, while software engineers can practice active recall for technical interiviews doing DSA problems, there is no real way to practice retrieval of UI/UX design principles in preperation for design interviews. So we decided to make it. The First Structured Interview Prep Platform for UI/UX Design.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Here are the planned features:
+* Generate UI/UX interview practice problems
+* Draw diagrams for the given problem using Excalidraw
+* Have a conversation with an AI interviewer real-time about constraints and the general deisgn process
+* Receive rubric based scoring that evaluates user transcripts, diagramming, and task/constraint alignment
+* View stats on probelms solves, daily activity, etc.
 
-## Learn More
+We are still early in the development process and are currently focused on flushing out the main MVP. More features will surface as we go through development which wil be queued for after the MVP is complete.
 
-To learn more about Next.js, take a look at the following resources:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Built With
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The application is hosted on Vercel and built with Next.js (React). Authentication and identity management are handled by AWS Cognito, with DynamoDB and S3 used for user data storage.
 
-## Deploy on Vercel
+* [![Vercel][Vercel]][Vercel-url]
+* [![React][React.js]][React-url]
+* [![Next][Next.js]][Next-url]
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+* [![AWS][AWS]][AWS-url]
+* [![ChatGPT][Gpt]][Gpt-url]
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### System Architecture
+TODO
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- ROADMAP -->
+## Roadmap
+**Development**
+- [ ] Add real-time AI interviewer
+- [ ] Finish frontend for settings page
+- [ ] Design/Implement landing page
+
+**Documentation**
+- [ ] Add Changelog
+- [ ] Populate Github Issues
+- [ ] Add system architecture to README
+
+
+See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of upcoming features.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- CONTACT -->
+## Contact
+
+Justin Zhao - [LinkedIn](https://www.linkedin.com/in/justinzhao1/) - justinzhao1324@gmail.com
+
+Junheng Zheng - [LinkedIn](https://www.linkedin.com/in/junhengzheng/) - jz7259@g.rit.edu
+
+Project Link: [To be added]()
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+
+[product-screenshot]: images/screenshot.png
+[Gpt]: https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&style=for-the-badge&logoColor=white
+[Gpt-url]: https://chatgpt.com
+[Vercel]: https://img.shields.io/badge/Vercel-%23000000.svg?logo=vercel&style=for-the-badge&logoColor=white
+[Vercel-url]: https://vercel.com
+[Next.js]: https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white
+[Next-url]: https://nextjs.org/
+[React.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
+[React-url]: https://reactjs.org/
+[Vue.js]: https://img.shields.io/badge/Vue.js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D
+[AWS]: https://custom-icon-badges.demolab.com/badge/AWS-%23FF9900.svg?logo=aws&style=for-the-badge&logoColor=white
+[AWS-url]: https://aws.amazon.com/
