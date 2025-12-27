@@ -9,11 +9,12 @@
 -->
 
 <!-- PROJECT LOGO -->
+
 <br />
 <div align="center">
-  <!-- <a href="https://github.com/othneildrew/Best-README-Template">
+  <a href="">
     <img src="images/logo.png" alt="Logo" width="80" height="80">
-  </a> -->
+  </a>
 
   <h3 align="center">UI Interviewer</h3>
 
@@ -26,8 +27,7 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+[![Product Banner][product-banner]]()
 There are many interview prep resources for software engineers out there on the web—the most notorious being LeetCode; however, while software engineers can practice active recall for technical interiviews doing DSA problems, there is no real way to practice retrieval of UI/UX design principles in preperation for design interviews. So we decided to make it. The First Structured Interview Prep Platform for UI/UX Design.
 
 Here are the planned features:
@@ -41,17 +41,18 @@ We are still early in the development process and are currently focused on flush
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+## Screenshots
+[![Product Screenshots][product-screenshots]]()
+
 ## Built With
 
 The application is hosted on Vercel and built with Next.js (React). Authentication and identity management are handled by AWS Cognito, with DynamoDB and S3 used for user data storage.
 
-* [![Vercel][Vercel]][Vercel-url]
-* [![React][React.js]][React-url]
-* [![Next][Next.js]][Next-url]
-
-* [![AWS][AWS]][AWS-url]
-* [![ChatGPT][Gpt]][Gpt-url]
-
+[![Vercel][Vercel]][Vercel-url]
+[![React][React.js]][React-url]
+[![Next][Next.js]][Next-url]
+[![AWS][AWS]][AWS-url]
+[![DnamoDB][Dynamodb]][Dynamodb-url]
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -90,15 +91,16 @@ Project Link: [To be added]()
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
-[product-screenshot]: https://cdn-images-1.medium.com/v2/resize:fit:1600/1*EL3Rxn7OvUwWjanhrEbMaw.png
-[Gpt]: https://img.shields.io/badge/ChatGPT-74aa9c?logo=openai&style=for-the-badge&logoColor=white
-[Gpt-url]: https://chatgpt.com
-[Vercel]: https://img.shields.io/badge/Vercel-%23000000.svg?logo=vercel&style=for-the-badge&logoColor=white
+[product-screenshot]: images/screenshot.png
+[product-screenshots]: images/screenshots.png
+[product-banner]: images/banner.png
+[Vercel]: https://skillicons.dev/icons?i=vercel
 [Vercel-url]: https://vercel.com
-[Next.js]: https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white
+[Next.js]: https://skillicons.dev/icons?i=nextjs
 [Next-url]: https://nextjs.org/
-[React.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
+[React.js]: https://skillicons.dev/icons?i=react
 [React-url]: https://reactjs.org/
-[Vue.js]: https://img.shields.io/badge/Vue.js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D
-[AWS]: https://custom-icon-badges.demolab.com/badge/AWS-%23FF9900.svg?logo=aws&style=for-the-badge&logoColor=white
+[AWS]: https://skillicons.dev/icons?i=aws
 [AWS-url]: https://aws.amazon.com/
+[Dynamodb]: https://skillicons.dev/icons?i=dynamodb
+[Dynamodb-url]:https://aws.amazon.com/dynamodb/
