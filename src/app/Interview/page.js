@@ -37,6 +37,30 @@ const Interview = () => {
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
+  
+  // Conversation state management
+  const [conversationState, setConversationState] = useState("waiting"); // "user_turn", "ai_turn", "waiting", "processing"
+  const [conversationHistory, setConversationHistory] = useState([]); // Array of {role: "user"|"assistant", content: string, timestamp: Date}
+  const [currentUserMessage, setCurrentUserMessage] = useState(""); // Accumulated user speech
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [hasPendingAudio, setHasPendingAudio] = useState(false);
+  
+  // Audio playback
+  const audioRef = useRef(null);
+  const audioSourceRef = useRef(null);
+  const audioUnlockedRef = useRef(false); // Track if user has interacted to unlock audio
+  const pendingAudioRef = useRef(null); // Store audio URL if play was blocked
+  
+  // Silence detection
+  const silenceTimerRef = useRef(null);
+  const lastSpeechTimeRef = useRef(null);
+  const conversationStateRef = useRef("waiting");
+  const currentUserMessageRef = useRef("");
+  const isProcessingAIRef = useRef(false);
+  const SILENCE_THRESHOLD_MS = 1750; // 1.75 seconds
+  
   const recognitionStartTimeRef = useRef(null);
   const recognitionRef = useRef(null);
   const isRecognitionRunningRef = useRef(false);
@@ -51,12 +75,304 @@ const Interview = () => {
   const setEvaluation = useStore((state) => state.setEvaluation);
   const setScreenshot = useStore((state) => state.setScreenshot);
 
+  // Stop audio playback
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      if (audioSourceRef.current) {
+        audioSourceRef.current = null;
+      }
+      setIsAISpeaking(false);
+    }
+  };
+
+  // Play pending audio manually (when user clicks play button)
+  const playPendingAudio = async () => {
+    if (pendingAudioRef.current && audioRef.current) {
+      try {
+        audioRef.current.src = pendingAudioRef.current;
+        audioSourceRef.current = pendingAudioRef.current;
+        setIsAISpeaking(true);
+        setConversationState("ai_turn");
+        setErrorMessage(null);
+        setHasPendingAudio(false);
+        audioUnlockedRef.current = true;
+        
+        await audioRef.current.play();
+        pendingAudioRef.current = null;
+      } catch (err) {
+        console.error("Failed to play pending audio:", err);
+        setErrorMessage("Failed to play audio. Please check your audio settings.");
+        setIsAISpeaking(false);
+        setConversationState("waiting");
+      }
+    }
+  };
+
+  // Clean up audio and timers on unmount
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      if (audioRef.current) {
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Clean up when interview is paused or submitted
+  useEffect(() => {
+    if (isPaused || isSubmitted) {
+      stopAudio();
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      setConversationState("waiting");
+      setIsProcessingAI(false);
+    }
+  }, [isPaused, isSubmitted]);
+
+  // Unlock audio on user click (anywhere on the page)
+  useEffect(() => {
+    const handleUserInteraction = async () => {
+      audioUnlockedRef.current = true;
+      
+      // If there's pending audio, try to play it
+      if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
+        try {
+          audioRef.current.src = pendingAudioRef.current;
+          audioSourceRef.current = pendingAudioRef.current;
+          setIsAISpeaking(true);
+          setConversationState("ai_turn");
+          setErrorMessage(null);
+          setHasPendingAudio(false);
+          
+          await audioRef.current.play();
+          pendingAudioRef.current = null;
+        } catch (err) {
+          console.error("Failed to play pending audio:", err);
+          setIsAISpeaking(false);
+          setConversationState("waiting");
+        }
+      }
+    };
+
+    // Listen for clicks anywhere on the document
+    document.addEventListener("click", handleUserInteraction, { once: false });
+    document.addEventListener("touchstart", handleUserInteraction, { once: false });
+
+    return () => {
+      document.removeEventListener("click", handleUserInteraction);
+      document.removeEventListener("touchstart", handleUserInteraction);
+    };
+  }, [isAISpeaking]);
+
+  // Generate AI response and play audio
+  const generateAIResponse = async (userTranscript, isInitialGreeting = false) => {
+    // Allow empty transcript only for initial greeting
+    if (!isInitialGreeting && (!userTranscript || userTranscript.trim().length === 0)) {
+      return;
+    }
+
+    setConversationState("processing");
+    setIsProcessingAI(true);
+    setErrorMessage(null);
+    stopAudio(); // Stop any current audio
+
+    try {
+      // Add user message to conversation history (only if not initial greeting)
+      let updatedHistory = [...conversationHistory];
+      if (!isInitialGreeting && userTranscript && userTranscript.trim().length > 0) {
+        const userMessage = {
+          role: "user",
+          content: userTranscript.trim(),
+          timestamp: new Date(),
+        };
+        updatedHistory = [...updatedHistory, userMessage];
+      }
+      
+      // Keep conversation history bounded (last 20 messages to avoid token limits)
+      updatedHistory = updatedHistory.slice(-20);
+      setConversationHistory(updatedHistory);
+      
+      // Clear current user message AFTER adding to history
+      if (!isInitialGreeting && userTranscript && userTranscript.trim().length > 0) {
+        setCurrentUserMessage("");
+      }
+
+      // Call interviewer chat API
+      const response = await fetch("/api/interviewer/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcript: userTranscript.trim(),
+          conversationHistory: updatedHistory.slice(0, -1).map(msg => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          design,
+          target,
+          tohelp,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || "Failed to generate AI response");
+      }
+
+      const data = await response.json();
+      const aiResponse = data.response;
+
+      if (!aiResponse) {
+        throw new Error("No response received from AI");
+      }
+
+      // Add AI message to conversation history
+      const aiMessage = {
+        role: "assistant",
+        content: aiResponse,
+        timestamp: new Date(),
+      };
+      
+      setConversationHistory((prev) => [...prev, aiMessage]);
+
+      // Generate audio using TTS
+      const ttsResponse = await fetch("/api/tts/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: aiResponse,
+        }),
+      });
+
+      if (!ttsResponse.ok) {
+        const errorData = await ttsResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || "Failed to generate audio");
+      }
+
+      const ttsData = await ttsResponse.json();
+      
+      if (!ttsData.audio) {
+        throw new Error("No audio data received");
+      }
+
+      // Play audio
+      const audioBlob = new Blob(
+        [Uint8Array.from(atob(ttsData.audio), (c) => c.charCodeAt(0))],
+        { type: ttsData.mimeType || "audio/mpeg" }
+      );
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+        audioRef.current.addEventListener("ended", () => {
+          setIsAISpeaking(false);
+          setConversationState("waiting");
+          if (audioSourceRef.current) {
+            URL.revokeObjectURL(audioSourceRef.current);
+            audioSourceRef.current = null;
+          }
+        });
+        audioRef.current.addEventListener("error", (e) => {
+          console.error("Audio playback error:", e);
+          setIsAISpeaking(false);
+          setConversationState("waiting");
+          setErrorMessage("Failed to play audio. Please check your audio settings.");
+        });
+      }
+
+      audioRef.current.src = audioUrl;
+      audioSourceRef.current = audioUrl;
+      setIsAISpeaking(true);
+      setConversationState("ai_turn");
+      
+      // Try to play audio - handle autoplay restrictions
+      try {
+        await audioRef.current.play();
+        // If successful, mark audio as unlocked for future plays
+        audioUnlockedRef.current = true;
+        pendingAudioRef.current = null;
+      } catch (playError) {
+        // Autoplay was blocked - user needs to interact first
+        console.warn("Audio autoplay blocked:", playError);
+        setIsAISpeaking(false);
+        setConversationState("waiting");
+        
+        // Store the audio URL so we can play it after user interaction
+        pendingAudioRef.current = audioUrl;
+        setHasPendingAudio(true);
+        
+        // Show a message that user needs to interact
+        setErrorMessage("Audio ready. Click the play button or start speaking to hear the response.");
+      }
+    } catch (error) {
+      console.error("Error generating AI response:", error);
+      setErrorMessage(error.message || "An error occurred. Please try again.");
+      setConversationState("waiting");
+      setIsProcessingAI(false);
+    } finally {
+      setIsProcessingAI(false);
+    }
+  };
+
+  // Handle silence detection - when user stops speaking
+  const handleSilenceDetected = () => {
+    // Use refs to get the latest values
+    const userMsg = currentUserMessageRef.current.trim();
+    const state = conversationStateRef.current;
+    const processing = isProcessingAIRef.current;
+    
+    if (state === "user_turn" && userMsg.length > 0 && !processing) {
+      const finalTranscript = userMsg;
+      // Don't clear currentUserMessage here - let generateAIResponse handle it
+      // after the message is added to conversation history
+      setInterimTranscript("");
+      generateAIResponse(finalTranscript);
+    }
+  };
+
+  // Reset silence timer when speech is detected
+  const resetSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    lastSpeechTimeRef.current = Date.now();
+    
+    const state = conversationStateRef.current;
+    // Only set up silence timer if we're in a state where user can speak
+    if (state === "waiting" || state === "user_turn") {
+      setConversationState("user_turn");
+      silenceTimerRef.current = setTimeout(() => {
+        // Check refs again at execution time
+        const currentState = conversationStateRef.current;
+        const userMsg = currentUserMessageRef.current.trim();
+        const processing = isProcessingAIRef.current;
+        
+        if (currentState === "user_turn" && userMsg.length > 0 && !processing) {
+          handleSilenceDetected();
+        }
+      }, SILENCE_THRESHOLD_MS);
+    }
+  };
+
   // Handle submit
   const handleSubmit = async () => {
     setIsPaused(true);
     setIsGrading(true);
     
-    // Stop speech recognition immediately when submitting
+    // Stop speech recognition and audio immediately when submitting
+    stopAudio();
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -227,8 +543,6 @@ const Interview = () => {
     }
   };
   
-  
-
   // Load test JSON into Excalidraw
   const loadTestJSON = async () => {
     try {
@@ -267,6 +581,18 @@ const Interview = () => {
   useEffect(() => {
     secondsLeftRef.current = secondsLeft;
   }, [secondsLeft]);
+
+  useEffect(() => {
+    conversationStateRef.current = conversationState;
+  }, [conversationState]);
+
+  useEffect(() => {
+    currentUserMessageRef.current = currentUserMessage;
+  }, [currentUserMessage]);
+
+  useEffect(() => {
+    isProcessingAIRef.current = isProcessingAI;
+  }, [isProcessingAI]);
 
   // Reset timer whenever `timeValue` changes
   useEffect(() => {
@@ -321,18 +647,58 @@ const Interview = () => {
           recognitionStartTimeRef.current = Date.now();
         }
         setIsListening(true);
+        setConversationState("waiting");
+        // Don't clear currentUserMessage here - it should persist across recognition restarts
+        // Only clear it after it's been added to conversation history
       };
 
       recognition.onresult = (event) => {
         let interimText = "";
         let finalText = "";
+        let hasNewFinal = false;
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalText += transcript + " ";
+            hasNewFinal = true;
           } else {
             interimText += transcript;
+          }
+        }
+
+        // User interaction detected - unlock audio for future plays
+        if (finalText || interimText) {
+          audioUnlockedRef.current = true;
+          
+          // If there's pending audio, try to play it now
+          if (pendingAudioRef.current && audioRef.current) {
+            audioRef.current.src = pendingAudioRef.current;
+            audioSourceRef.current = pendingAudioRef.current;
+            setIsAISpeaking(true);
+            setConversationState("ai_turn");
+            setErrorMessage(null);
+            setHasPendingAudio(false);
+            
+            audioRef.current.play().then(() => {
+              pendingAudioRef.current = null;
+            }).catch((err) => {
+              console.error("Failed to play pending audio:", err);
+              setIsAISpeaking(false);
+              setConversationState("waiting");
+            });
+          }
+        }
+
+        // If we're in AI turn or processing, stop audio when user starts speaking
+        const currentState = conversationStateRef.current;
+        if ((currentState === "ai_turn" || currentState === "processing") && (finalText || interimText)) {
+          stopAudio();
+          setConversationState("user_turn");
+          setIsProcessingAI(false);
+          // Clear any pending silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
           }
         }
 
@@ -347,11 +713,28 @@ const Interview = () => {
           const seconds = elapsedSeconds % 60;
           const timestamp = `[${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}]`;
           
-          setTranscript((prev) => prev + `${timestamp} ${finalText.trim()}\n\n`);
+          const finalTextTrimmed = finalText.trim();
+          setTranscript((prev) => prev + `${timestamp} ${finalTextTrimmed}\n\n`);
+          
+          // Accumulate user message for conversation
+          setCurrentUserMessage((prev) => {
+            const updated = (prev + " " + finalTextTrimmed).trim();
+            // Reset silence timer when we get final text
+            if (hasNewFinal) {
+              resetSilenceTimer();
+            }
+            return updated;
+          });
         }
         
         // Update interim transcript for real-time display
-        setInterimTranscript(interimText);
+        if (interimText) {
+          setInterimTranscript(interimText);
+          // Reset silence timer on any speech activity
+          resetSilenceTimer();
+        } else {
+          setInterimTranscript("");
+        }
       };
 
       recognition.onerror = (event) => {
@@ -448,6 +831,9 @@ const Interview = () => {
           try {
             recognitionRef.current.start();
             // onstart handler will set isListening and start time
+            
+            // Don't auto-send initial greeting - wait for user to speak first
+            // This ensures user interaction before any audio playback
           } catch (e) {
             // Already started or error, ignore
             console.warn("Could not start recognition:", e);
@@ -511,8 +897,15 @@ const Interview = () => {
               </p>
             </div>
 
-            <i className="fa-solid fa-microphone text-white"></i>
-            <i className="fa-solid fa-volume-high text-white"></i>
+            <div className="flex items-center gap-2">
+              <i className={`fa-solid fa-microphone text-white ${isListening && conversationState === "user_turn" ? "animate-pulse" : ""}`}></i>
+              {isAISpeaking && (
+                <i className="fa-solid fa-volume-high text-white animate-pulse"></i>
+              )}
+              {isProcessingAI && (
+                <i className="fa-solid fa-spinner fa-spin text-white"></i>
+              )}
+            </div>
 
             <button
               onClick={handleSubmit}
@@ -571,47 +964,143 @@ const Interview = () => {
             {/* TRANSCRIPT BOX */}
             <div className="w-80 h-full border border-border rounded-lg overflow-hidden bg-white flex flex-col">
                 <div className="px-4 py-3 border-b border-border bg-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">Transcript</h3>
-                  {isListening && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-gray-600">Listening...</span>
-                    </div>
-                  )}
+                  <h3 className="font-semibold text-sm">Conversation</h3>
+                  <div className="flex items-center gap-2">
+                    {conversationState === "user_turn" && isListening && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                        <span className="text-xs text-gray-600">You're speaking</span>
+                      </div>
+                    )}
+                    {conversationState === "processing" && (
+                      <div className="flex items-center gap-1">
+                        <i className="fa-solid fa-spinner fa-spin text-primary"></i>
+                        <span className="text-xs text-gray-600">Processing...</span>
+                      </div>
+                    )}
+                    {conversationState === "ai_turn" && isAISpeaking && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <span className="text-xs text-gray-600">AI speaking</span>
+                      </div>
+                    )}
+                    {conversationState === "waiting" && isListening && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                        <span className="text-xs text-gray-600">Ready</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
-                  {transcript || interimTranscript ? (
-                    <div className="space-y-2">
-                      {transcript && (
+                  {/* Always show conversation if history exists, or if user is currently speaking/transcribing */}
+                  {(conversationHistory.length > 0 || currentUserMessage || interimTranscript || transcript) ? (
+                    <div className="space-y-4">
+                      {/* Display conversation history - this persists and shows all previous messages */}
+                      {conversationHistory.map((msg, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg ${
+                            msg.role === "user"
+                              ? "bg-blue-50 ml-4 border-l-2 border-blue-300"
+                              : "bg-gray-50 mr-4 border-l-2 border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">
+                              {msg.role === "user" ? "You" : "Interviewer"}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                            {msg.content}
+                          </p>
+                        </div>
+                      ))}
+                      
+                      {/* Show current user input being transcribed (in-progress, not yet in history) */}
+                      {(currentUserMessage || interimTranscript) && (conversationState === "user_turn" || conversationState === "waiting") && (
+                        <div className="p-3 rounded-lg bg-blue-50 ml-4 border-l-2 border-blue-300 border-dashed opacity-75">
+                          <div className="flex items-start gap-2 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">You</span>
+                            <span className="text-xs text-gray-400">Speaking...</span>
+                          </div>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                            {currentUserMessage}
+                            {interimTranscript && (
+                              <span className="text-gray-500 italic">{interimTranscript}</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Legacy transcript display (for backward compatibility) */}
+                      {transcript && conversationHistory.length === 0 && (
                         <p className="text-sm text-gray-800 whitespace-pre-wrap">
                           {transcript}
                         </p>
                       )}
-                      {interimTranscript && (
-                        <p className="text-sm text-gray-500 italic whitespace-pre-wrap">
-                          {interimTranscript}
-                        </p>
+                      
+                      {/* Error message or pending audio notice */}
+                      {errorMessage && (
+                        <div className={`p-3 rounded-lg border-l-2 ${
+                          hasPendingAudio 
+                            ? "bg-blue-50 border-blue-300" 
+                            : "bg-red-50 border-red-300"
+                        }`}>
+                          <p className={`text-sm ${hasPendingAudio ? "text-blue-800" : "text-red-800"}`}>
+                            {errorMessage}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            {hasPendingAudio && (
+                              <button
+                                onClick={playPendingAudio}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                              >
+                                <i className="fa-solid fa-play"></i>
+                                Play Audio
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setErrorMessage(null);
+                                setHasPendingAudio(false);
+                              }}
+                              className={`text-xs ${hasPendingAudio ? "text-blue-600 hover:text-blue-800" : "text-red-600 hover:text-red-800"}`}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500 italic">
                       {isListening
-                        ? "Listening... Start speaking to see your transcript here."
-                        : "Click to start listening..."}
+                        ? "Listening... Start speaking to begin the conversation."
+                        : "Waiting to start..."}
                     </p>
                   )}
                 </div>
-                {(transcript || interimTranscript) && (
-                  <div className="px-4 py-2 border-t border-border bg-gray-50">
+                {(conversationHistory.length > 0 || transcript) && (
+                  <div className="px-4 py-2 border-t border-border bg-gray-50 flex justify-between items-center">
                     <button
                       onClick={() => {
                         setTranscript("");
                         setInterimTranscript("");
+                        setConversationHistory([]);
+                        setCurrentUserMessage("");
+                        setErrorMessage(null);
                       }}
                       className="text-xs text-gray-600 hover:text-gray-800 transition-colors"
                     >
-                      Clear Transcript
+                      Clear Conversation
                     </button>
+                    <span className="text-xs text-gray-400">
+                      {conversationHistory.length} messages
+                    </span>
                   </div>
                 )}
               </div>
