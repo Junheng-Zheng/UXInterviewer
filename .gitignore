@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 DYNAMODB_USAGE.md
+
+#system-prompts
+prompts/
