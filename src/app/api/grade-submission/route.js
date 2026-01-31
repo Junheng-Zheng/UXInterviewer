@@ -89,14 +89,14 @@ export async function POST(request) {
                 type: "image_url",
                 image_url: {
                   url: `data:image/png;base64,${screenshot}`,
-                  detail: "high",
+                  detail: "low", // Changed from "high" to "low" for faster processing (512x512 instead of high-res)
                 },
               },
             ],
           },
         ],
-        temperature: 0.7,
-        max_tokens: 4000, // Increased to ensure complete JSON response
+        temperature: 0.3, // Reduced from 0.7 to 0.3 for faster, more focused responses
+        max_tokens: 2000, // Reduced from 4000 to 2000 - sufficient for structured feedback
       };
     } else {
       return NextResponse.json(

@@ -1,39 +1,44 @@
-"use client";
+'use client';
 
-import dynamic from "next/dynamic";
+import { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Mic, MicOff, Clock } from 'lucide-react';
+import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
+import useStore from '../../store/module';
 import "@excalidraw/excalidraw/index.css";
-import { useState, useEffect, useRef } from "react";
-import useStore from "../../store/module";
-import Animatedlink from "../Components/Atoms/Animatedlink";
-import Profile from "../Components/Molecules/Profile";
-import Results from "../Components/Templates/Results";
-
-const Excalidraw = dynamic(
-  () => import("@excalidraw/excalidraw").then((m) => m.Excalidraw),
-  { ssr: false }
-);
 
 // Import exportToBlob for screenshot capture
 let exportToBlob = null;
-import("@excalidraw/excalidraw").then((m) => {
-  exportToBlob = m.exportToBlob;
-});
+if (typeof window !== 'undefined') {
+  import("@excalidraw/excalidraw").then((m) => {
+    exportToBlob = m.exportToBlob;
+  });
+}
 
-const Interview = () => {
-  const timeValue = useStore((state) => state.time); // minutes from store
+export default function WhiteboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get interview parameters from store
   const design = useStore((state) => state.design);
   const target = useStore((state) => state.target);
   const tohelp = useStore((state) => state.tohelp);
   const selectedModel = useStore((state) => state.selectedModel);
-
-  const [secondsLeft, setSecondsLeft] = useState(timeValue * 60);
+  const setEvaluation = useStore((state) => state.setEvaluation);
+  const setScreenshot = useStore((state) => state.setScreenshot);
+  
+  // Get time from URL params, default to 1800 seconds (30 minutes)
+  const initialTime = parseInt(searchParams.get('time') || '1800', 10);
+  const [timeRemaining, setTimeRemaining] = useState(initialTime);
   const [isPaused, setIsPaused] = useState(false);
-  const [warning, setWarning] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
+  
+  // Excalidraw state
   const [excalidrawJson, setExcalidrawJson] = useState(null);
   const [excalidrawKey, setExcalidrawKey] = useState(0); // Key to force re-render
-  const [currentExcalidrawData, setCurrentExcalidrawData] = useState(null);
+  
+  // Speech recognition state
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -67,13 +72,16 @@ const Interview = () => {
   const excalidrawDataRef = useRef(null);
   const isSubmittedRef = useRef(false);
   const isPausedRef = useRef(false);
-  const secondsLeftRef = useRef(secondsLeft);
+  const timeRemainingRef = useRef(timeRemaining);
   const interviewStartTimeRef = useRef(null); // Track when interview started
+  const aiJustFinishedRef = useRef(false); // Track if AI just finished speaking
 
-  const excalidrawRef = useRef(null);
   const excalidrawAPIRef = useRef(null);
-  const setEvaluation = useStore((state) => state.setEvaluation);
-  const setScreenshot = useStore((state) => state.setScreenshot);
+  
+  const [interviewerMessage, setInterviewerMessage] = useState({
+    visible: "",
+    fading: ""
+  });
 
   // Stop audio playback
   const stopAudio = () => {
@@ -87,10 +95,40 @@ const Interview = () => {
     }
   };
 
+  // Stop speech recognition safely
+  const stopRecognition = () => {
+    if (recognitionRef.current && isRecognitionRunningRef.current) {
+      try {
+        recognitionRef.current.stop();
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+      } catch (e) {
+        console.warn("Error stopping recognition:", e);
+      }
+    }
+  };
+
+  // Start speech recognition safely
+  const startRecognition = () => {
+    const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
+    if (showInterview && recognitionRef.current && !isRecognitionRunningRef.current) {
+      try {
+        recognitionRef.current.start();
+        isRecognitionRunningRef.current = true;
+        setIsListening(true);
+      } catch (e) {
+        console.warn("Error starting recognition:", e);
+      }
+    }
+  };
+
   // Play pending audio manually (when user clicks play button)
   const playPendingAudio = async () => {
     if (pendingAudioRef.current && audioRef.current) {
       try {
+        // Stop recognition before AI speaks
+        stopRecognition();
+        
         audioRef.current.src = pendingAudioRef.current;
         audioSourceRef.current = pendingAudioRef.current;
         setIsAISpeaking(true);
@@ -106,6 +144,8 @@ const Interview = () => {
         setErrorMessage("Failed to play audio. Please check your audio settings.");
         setIsAISpeaking(false);
         setConversationState("waiting");
+        // Resume recognition on error
+        startRecognition();
       }
     }
   };
@@ -143,6 +183,9 @@ const Interview = () => {
       // If there's pending audio, try to play it
       if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
         try {
+          // Stop recognition before AI speaks
+          stopRecognition();
+          
           audioRef.current.src = pendingAudioRef.current;
           audioSourceRef.current = pendingAudioRef.current;
           setIsAISpeaking(true);
@@ -156,6 +199,8 @@ const Interview = () => {
           console.error("Failed to play pending audio:", err);
           setIsAISpeaking(false);
           setConversationState("waiting");
+          // Resume recognition on error
+          startRecognition();
         }
       }
     };
@@ -201,6 +246,7 @@ const Interview = () => {
       // Clear current user message AFTER adding to history
       if (!isInitialGreeting && userTranscript && userTranscript.trim().length > 0) {
         setCurrentUserMessage("");
+        currentUserMessageRef.current = "";
       }
 
       // Call interviewer chat API
@@ -241,6 +287,12 @@ const Interview = () => {
       };
       
       setConversationHistory((prev) => [...prev, aiMessage]);
+      
+      // Update interviewer message display
+      setInterviewerMessage({
+        visible: aiResponse.substring(0, Math.min(50, aiResponse.length)),
+        fading: aiResponse.substring(Math.min(50, aiResponse.length))
+      });
 
       // Generate audio using TTS
       const ttsResponse = await fetch("/api/tts/generate", {
@@ -280,15 +332,57 @@ const Interview = () => {
             URL.revokeObjectURL(audioSourceRef.current);
             audioSourceRef.current = null;
           }
+          
+          // Clear any accumulated user message to prevent false triggers
+          setCurrentUserMessage("");
+          currentUserMessageRef.current = "";
+          setInterimTranscript("");
+          
+          // Set flag to ignore immediate speech detection
+          aiJustFinishedRef.current = true;
+          
+          // Add delay before resuming recognition to avoid picking up residual audio
+          setTimeout(() => {
+            aiJustFinishedRef.current = false;
+            startRecognition();
+          }, 1500); // 1.5 second delay
         });
         audioRef.current.addEventListener("error", (e) => {
           console.error("Audio playback error:", e);
           setIsAISpeaking(false);
           setConversationState("waiting");
           setErrorMessage("Failed to play audio. Please check your audio settings.");
+          
+          // Clear user message on error too
+          setCurrentUserMessage("");
+          currentUserMessageRef.current = "";
+          setInterimTranscript("");
+          
+          // Set flag to ignore immediate speech detection
+          aiJustFinishedRef.current = true;
+          
+          // Resume recognition with delay on error too
+          setTimeout(() => {
+            aiJustFinishedRef.current = false;
+            startRecognition();
+          }, 1500);
         });
       }
 
+      // Clear accumulated user message before AI speaks to prevent false triggers
+      setCurrentUserMessage("");
+      currentUserMessageRef.current = "";
+      setInterimTranscript("");
+      
+      // Clear any pending silence timer
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      
+      // Stop recognition before AI speaks
+      stopRecognition();
+      
       audioRef.current.src = audioUrl;
       audioSourceRef.current = audioUrl;
       setIsAISpeaking(true);
@@ -311,7 +405,7 @@ const Interview = () => {
         setHasPendingAudio(true);
         
         // Show a message that user needs to interact
-        setErrorMessage("Audio ready. Click the play button or start speaking to hear the response.");
+        setErrorMessage("Audio ready. Click to hear the response.");
       }
     } catch (error) {
       console.error("Error generating AI response:", error);
@@ -330,10 +424,9 @@ const Interview = () => {
     const state = conversationStateRef.current;
     const processing = isProcessingAIRef.current;
     
-    if (state === "user_turn" && userMsg.length > 0 && !processing) {
+    // Require at least 3 characters to prevent noise from triggering responses
+    if (state === "user_turn" && userMsg.length >= 3 && !processing) {
       const finalTranscript = userMsg;
-      // Don't clear currentUserMessage here - let generateAIResponse handle it
-      // after the message is added to conversation history
       setInterimTranscript("");
       generateAIResponse(finalTranscript);
     }
@@ -341,6 +434,12 @@ const Interview = () => {
 
   // Reset silence timer when speech is detected
   const resetSilenceTimer = () => {
+    // Ignore speech detected immediately after AI finished speaking
+    if (aiJustFinishedRef.current) {
+      console.log("Ignoring speech detected immediately after AI finished");
+      return;
+    }
+    
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
@@ -365,23 +464,24 @@ const Interview = () => {
 
   // Handle submit
   const handleSubmit = async () => {
+    // Validate that interview parameters are set
+    if (!design || !target || !tohelp) {
+      alert("Interview parameters are missing. Please start the interview from the setup page.");
+      router.push('/Refactor');
+      return;
+    }
+    
     setIsPaused(true);
     setIsGrading(true);
     
+    // Navigate to grading page immediately
+    router.push('/refactor/grading');
+    
     // Stop speech recognition and audio immediately when submitting
     stopAudio();
+    stopRecognition();
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
-    }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        isRecognitionRunningRef.current = false;
-        setIsListening(false);
-        console.log("Speech recognition stopped on submit");
-      } catch (e) {
-        // Recognition might not be running, ignore
-      }
     }
   
     try {
@@ -478,9 +578,7 @@ const Interview = () => {
       console.log("Screenshot captured successfully, base64 length:", screenshotBase64.length);
   
       // Calculate completion time (time taken to complete the submission)
-      // Use timer-based calculation: initial time - remaining time = time used
-      const initialTimeSeconds = timeValue * 60;
-      const completionTimeSeconds = initialTimeSeconds - secondsLeft;
+      const completionTimeSeconds = initialTime - timeRemaining;
       const completionTimeMinutes = Math.floor(completionTimeSeconds / 60);
       
       // Prepare excalidraw data for saving
@@ -530,11 +628,12 @@ const Interview = () => {
         throw new Error(errorMessage);
       }
 
+      console.log("Evaluation received from API:", evaluation);
       setEvaluation(evaluation);
       // Store the screenshot for display on results page
       setScreenshot(screenshotBase64);
       console.log("Screenshot stored:", screenshotBase64 ? `${screenshotBase64.substring(0, 50)}...` : "null");
-      setIsSubmitted(true);
+      console.log("Evaluation complete - grading page will automatically update");
     } catch (error) {
       console.error("Error grading submission:", error);
       alert(error.message || "Failed to grade submission. Please try again.");
@@ -542,7 +641,7 @@ const Interview = () => {
       setIsGrading(false);
     }
   };
-  
+
   // Load test JSON into Excalidraw
   const loadTestJSON = async () => {
     try {
@@ -579,8 +678,8 @@ const Interview = () => {
   }, [isPaused]);
   
   useEffect(() => {
-    secondsLeftRef.current = secondsLeft;
-  }, [secondsLeft]);
+    timeRemainingRef.current = timeRemaining;
+  }, [timeRemaining]);
 
   useEffect(() => {
     conversationStateRef.current = conversationState;
@@ -594,35 +693,36 @@ const Interview = () => {
     isProcessingAIRef.current = isProcessingAI;
   }, [isProcessingAI]);
 
-  // Reset timer whenever `timeValue` changes
+  // Countdown timer
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSecondsLeft(timeValue * 60);
-    setWarning(false);
-    // Track when interview starts (when timer is initialized)
-    if (!interviewStartTimeRef.current) {
-      interviewStartTimeRef.current = Date.now();
-    }
-  }, [timeValue]);
+    if (timeRemaining <= 0 || isPaused || isSubmitted) return;
 
-  // TIMER
-  useEffect(() => {
-    if (secondsLeft <= 0 || isPaused || isSubmitted) return;
-
-    const interval = setInterval(() => {
-      setSecondsLeft((prev) => prev - 1);
+    const timer = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleSubmit(); // Auto-submit when time runs out
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [secondsLeft, isPaused, isSubmitted]);
+    return () => clearInterval(timer);
+  }, [timeRemaining, isPaused, isSubmitted]);
 
-  // WARNING effect
+  // Check if interview parameters are set on mount
   useEffect(() => {
-    if (secondsLeft <= 5 && !warning) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWarning(true);
+    if (!design || !target || !tohelp) {
+      console.warn("Interview parameters missing:", { design, target, tohelp });
+      const timer = setTimeout(() => {
+        if (confirm("Interview parameters are missing. Would you like to go to the setup page?")) {
+          router.push('/Refactor');
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
     }
-  }, [secondsLeft, warning]);
+  }, []); // Run only on mount
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -648,8 +748,6 @@ const Interview = () => {
         }
         setIsListening(true);
         setConversationState("waiting");
-        // Don't clear currentUserMessage here - it should persist across recognition restarts
-        // Only clear it after it's been added to conversation history
       };
 
       recognition.onresult = (event) => {
@@ -672,7 +770,10 @@ const Interview = () => {
           audioUnlockedRef.current = true;
           
           // If there's pending audio, try to play it now
-          if (pendingAudioRef.current && audioRef.current) {
+          if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
+            // Stop recognition before AI speaks
+            stopRecognition();
+            
             audioRef.current.src = pendingAudioRef.current;
             audioSourceRef.current = pendingAudioRef.current;
             setIsAISpeaking(true);
@@ -686,13 +787,18 @@ const Interview = () => {
               console.error("Failed to play pending audio:", err);
               setIsAISpeaking(false);
               setConversationState("waiting");
+              // Resume recognition on error
+              startRecognition();
             });
           }
         }
 
         // If we're in AI turn or processing, stop audio when user starts speaking
+        // Only allow interruption if recognition was intentionally running (not during AI speech)
         const currentState = conversationStateRef.current;
-        if ((currentState === "ai_turn" || currentState === "processing") && (finalText || interimText)) {
+        if ((currentState === "ai_turn" || currentState === "processing") && 
+            (finalText || interimText) && 
+            isRecognitionRunningRef.current) {
           stopAudio();
           setConversationState("user_turn");
           setIsProcessingAI(false);
@@ -702,19 +808,10 @@ const Interview = () => {
           }
         }
 
-        // Add final words to transcript with timestamp and newline
+        // Add final words to transcript
         if (finalText) {
-          // Calculate elapsed time from start
-          const elapsedMs = recognitionStartTimeRef.current 
-            ? Date.now() - recognitionStartTimeRef.current 
-            : 0;
-          const elapsedSeconds = Math.floor(elapsedMs / 1000);
-          const minutes = Math.floor(elapsedSeconds / 60);
-          const seconds = elapsedSeconds % 60;
-          const timestamp = `[${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}]`;
-          
           const finalTextTrimmed = finalText.trim();
-          setTranscript((prev) => prev + `${timestamp} ${finalTextTrimmed}\n\n`);
+          setTranscript((prev) => prev + finalTextTrimmed + " ");
           
           // Accumulate user message for conversation
           setCurrentUserMessage((prev) => {
@@ -741,78 +838,34 @@ const Interview = () => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "no-speech") {
           // Restart recognition if no speech detected and interview is active
-          // Use refs to get current state values
-          const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
+          const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
           if (showInterview && !isPausedRef.current) {
-            // Small delay before restarting to avoid rapid restarts
             setTimeout(() => {
-              const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
-              if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {
-                  // Already started or error, ignore
-                }
-              }
+              startRecognition();
             }, 500);
           }
         } else if (event.error === "not-allowed") {
           alert("Microphone access denied. Please enable microphone permissions.");
           setIsListening(false);
-        } else if (event.error === "aborted") {
-          // Aborted error - recognition was stopped unexpectedly
-          isRecognitionRunningRef.current = false;
-          setIsListening(false);
-          // Try to restart if interview is still active
-          console.warn("Speech recognition aborted, attempting to restart...");
-          const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
-          if (showInterview && !isPausedRef.current) {
-            setTimeout(() => {
-              const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
-              if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {
-                  // Ignore errors on restart
-                }
-              }
-            }, 1000);
-          }
-        } else {
-          // Other errors - log but don't restart automatically
-          console.warn("Speech recognition error:", event.error);
         }
       };
 
       recognition.onend = () => {
         isRecognitionRunningRef.current = false;
         setIsListening(false);
-        // Only restart recognition if interview is still active (not submitted and time remaining)
-        // Use refs to get current state values
-        const showInterview = secondsLeftRef.current > 0 && !isSubmittedRef.current;
+        // Only restart recognition if interview is still active and AI is not speaking
+        const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
         if (showInterview && !isPausedRef.current) {
-          // Add delay before restarting to avoid rapid restarts
           setTimeout(() => {
-            const stillActive = secondsLeftRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
-            if (stillActive && recognitionRef.current && !isRecognitionRunningRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {
-                // Already started or error, ignore
-              }
-            }
+            startRecognition();
           }, 500);
-        } else {
-          console.log("Speech recognition ended - not restarting (interview finished or results shown)");
         }
       };
 
       recognitionRef.current = recognition;
 
       return () => {
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
-        }
+        stopRecognition();
       };
     }
   }, []);
@@ -821,312 +874,170 @@ const Interview = () => {
   useEffect(() => {
     if (!recognitionRef.current) return;
 
-    const showInterview = secondsLeft > 0 && !isSubmitted;
+    const showInterview = timeRemaining > 0 && !isSubmitted;
     
     if (showInterview && !isPaused) {
-      // Start recognition when interview is active
-      // Add small delay to avoid race conditions
+      // Start recognition when interview is active (only if not during AI speech)
       const timeoutId = setTimeout(() => {
-        if (recognitionRef.current && secondsLeft > 0 && !isSubmitted && !isPaused && !isRecognitionRunningRef.current) {
-          try {
-            recognitionRef.current.start();
-            // onstart handler will set isListening and start time
-            
-            // Don't auto-send initial greeting - wait for user to speak first
-            // This ensures user interaction before any audio playback
-          } catch (e) {
-            // Already started or error, ignore
-            console.warn("Could not start recognition:", e);
-          }
+        // Don't start if AI is speaking
+        if (!isAISpeaking) {
+          startRecognition();
         }
       }, 100);
 
       return () => clearTimeout(timeoutId);
     } else {
       // Stop recognition when interview ends, is paused, or results are shown
-      if (isRecognitionRunningRef.current) {
-        try {
-          recognitionRef.current.stop();
-          isRecognitionRunningRef.current = false;
-          setIsListening(false);
-          console.log("Speech recognition stopped - interview ended or results shown");
-        } catch (e) {
-          // Not started, ignore
-        }
-      }
+      stopRecognition();
     }
-  }, [isSubmitted, isPaused, secondsLeft]);
+  }, [isSubmitted, isPaused, timeRemaining, isAISpeaking]);
 
-  // Explicitly stop recognition when results are shown
-  useEffect(() => {
-    const showResults = secondsLeft <= 0 || isSubmitted;
-    if (showResults && recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        isRecognitionRunningRef.current = false;
-        setIsListening(false);
-        console.log("Speech recognition stopped - results page shown");
-      } catch (e) {
-        // Recognition might not be running, ignore
-      }
-    }
-  }, [isSubmitted, secondsLeft]);
-
-  const timeFormatted = `${String(Math.floor(secondsLeft / 60)).padStart(
-    2,
-    "0"
-  )}:${String(secondsLeft % 60).padStart(2, "0")}`;
-
-  const showInterview = secondsLeft > 0 && !isSubmitted;
-  const showResults = secondsLeft <= 0 || isSubmitted;
+  // Format time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <>
-      {showInterview && (
-        <div className="h-dvh relative p-12">
-          {/* TIMER BAR */}
-          <div className="px-[20px] py-[16px] bg-primary rounded-full flex items-center gap-6 absolute left-1/2 -translate-x-1/2 top-4 z-30">
-            <div className="px-3 py-2 bg-white gap-2 flex items-center rounded-full">
-              <button onClick={() => setIsPaused((prev) => !prev)}>
-                <i
-                  className={`fa-solid ${isPaused ? "fa-play" : "fa-pause"}`}
-                ></i>
-              </button>
-              <p className={`${warning ? "text-red-500" : "text-primary"}`}>
-                {timeFormatted}
-              </p>
-            </div>
+      <style jsx global>{`
+        /* Hamburger Menu - Multiple selectors to catch it */
+        .excalidraw .layer-ui__wrapper__footer-left,
+        .excalidraw .layer-ui__wrapper__footer-left button,
+        .excalidraw button[title="Menu"],
+        .excalidraw button[aria-label="Menu"],
+        .excalidraw .main-menu-trigger,
+        .excalidraw .dropdown-menu-button,
+        
+        /* Help/Question mark */
+        .excalidraw .layer-ui__wrapper__footer-right,
+        .excalidraw .layer-ui__wrapper__footer-right button,
+        .excalidraw button[aria-label="Help"],
+        .excalidraw .help-icon,
+        
+        /* Library button */
+        .excalidraw button[title="Library"],
+        .excalidraw .library-button,
+        
+        /* Top corners */
+        .excalidraw .layer-ui__wrapper__top-left > button:first-child,
+        .excalidraw .layer-ui__wrapper__top-right {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          position: absolute !important;
+          left: -9999px !important;
+        }
+        
+        /* Force hide footer sections */
+        .excalidraw .layer-ui__wrapper__footer {
+          justify-content: center !important;
+        }
+      `}</style>
+      <div className="relative text-sm p-8 w-full h-screen bg-gray-200 ">
+        {/* Excalidraw Canvas - Full Screen */}
+              <div className = "absolute top-0 left-0 w-full flex justify-between h-full">
+        {Array.from({length: 256}).map((_, index) => (
+          <div key={index} className="w-px h-full bg-gray-50 rounded-full" />
+        ))}
+      </div>
 
-            <div className="flex items-center gap-2">
-              <i className={`fa-solid fa-microphone text-white ${isListening && conversationState === "user_turn" ? "animate-pulse" : ""}`}></i>
-              {isAISpeaking && (
-                <i className="fa-solid fa-volume-high text-white animate-pulse"></i>
+        <div className="w-full h-full relative rounded-xl overflow-hidden">
+          <ExcalidrawWrapper 
+            key={excalidrawKey}
+            initialData={excalidrawJson}
+            onReady={(api) => {
+              excalidrawAPIRef.current = api;
+            }}
+            onChange={(elements, appState, files) => {
+              excalidrawDataRef.current = { elements, appState, files };
+            }}
+          />
+
+
+        <div className="absolute left-12 bottom-12 w-[360px] border border-[#e4e4e4] rounded-xl p-6 bg-white/70 backdrop-blur-sm z-50 flex gap-2.5 items-start">
+
+        {/* Message Content */}
+          <div className="flex-1 font-normal gap-1 flex flex-col min-w-0">
+            
+            {/* Status indicators */}
+            <div className="flex items-center gap-2 mt-2">
+              {isListening && conversationState === "user_turn" && (
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs text-gray-600">Listening</span>
+                </div>
               )}
               {isProcessingAI && (
-                <i className="fa-solid fa-spinner fa-spin text-white"></i>
+                <div className="flex items-center gap-1">
+                  <i className="fa-solid fa-spinner fa-spin text-[#3168f5]"></i>
+                  <span className="text-xs text-gray-600">Thinking...</span>
+                </div>
+              )}
+              {hasPendingAudio && (
+                <button
+                  onClick={playPendingAudio}
+                  className="px-2 py-1 bg-[#3168f5] text-white text-xs rounded hover:bg-[#2557d4]"
+                >
+                  <i className="fa-solid fa-play mr-1"></i>
+                  Play Response
+                </button>
               )}
             </div>
 
-            <button
-              onClick={handleSubmit}
-              disabled={isGrading}
-              className="px-4 py-2 bg-white text-primary rounded-full font-semibold hover:bg-gray-100 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Submit interview"
-            >
-              {isGrading ? (
-                <>
-                  <i className="fa-solid fa-spinner fa-spin"></i>
-                  Grading...
-                </>
-              ) : (
-                <>
-                  <i className="fa-solid fa-check"></i>
-                  Submit
-                </>
-              )}
-            </button>
+                      <h3 className="text-xl text-black font-serif">Interviewer</h3>
+            {conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant'&&  (
+              <p className="text-sm text-black whitespace-pre-wrap">
+                <span>{conversationHistory[conversationHistory.length - 1].content}</span>
+              </p>
+            )
+            }
+
           </div>
+      </div>
 
-          {/* NAV BAR */}
-          <div className="flex justify-between items-center mb-4 pt-16">
-            <div className="flex items-center gap-6">
-              <Animatedlink className="flex items-center gap-2">
-                <i className="fa-solid fa-sign-out scale-x-[-1]"></i>
-                Home
-              </Animatedlink>
-
-              <Animatedlink className="flex items-center gap-2">
-                <i className="fa-solid fa-refresh"></i>
-                Restart
-              </Animatedlink>
-
-              <Animatedlink className="flex items-center gap-2">
-                <i className="fa-solid fa-closed-captioning"></i>
-                Captions
-              </Animatedlink>
-
-              <button
-                onClick={loadTestJSON}
-                className="flex items-center gap-2 text-primary hover:opacity-80 transition-opacity"
-                title="Load test diagram"
-              >
-                <i className="fa-solid fa-file-import"></i>
-                Load Test Diagram
-              </button>
-            </div>
-            <div className="z-20">
-              <Profile />
-            </div>
-          </div>
-
-          {/* MAIN CONTENT AREA - Split Layout */}
-          <div className="h-[calc(100vh-180px)] flex gap-4">
-            {/* TRANSCRIPT BOX */}
-            <div className="w-80 h-full border border-border rounded-lg overflow-hidden bg-white flex flex-col">
-                <div className="px-4 py-3 border-b border-border bg-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">Conversation</h3>
-                  <div className="flex items-center gap-2">
-                    {conversationState === "user_turn" && isListening && (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs text-gray-600">You&apos;re speaking</span>
-                      </div>
-                    )}
-                    {conversationState === "processing" && (
-                      <div className="flex items-center gap-1">
-                        <i className="fa-solid fa-spinner fa-spin text-primary"></i>
-                        <span className="text-xs text-gray-600">Processing...</span>
-                      </div>
-                    )}
-                    {conversationState === "ai_turn" && isAISpeaking && (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs text-gray-600">AI speaking</span>
-                      </div>
-                    )}
-                    {conversationState === "waiting" && isListening && (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                        <span className="text-xs text-gray-600">Ready</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  {/* Always show conversation if history exists, or if user is currently speaking/transcribing */}
-                  {(conversationHistory.length > 0 || currentUserMessage || interimTranscript || transcript) ? (
-                    <div className="space-y-4">
-                      {/* Display conversation history - this persists and shows all previous messages */}
-                      {conversationHistory.map((msg, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-lg ${
-                            msg.role === "user"
-                              ? "bg-blue-50 ml-4 border-l-2 border-blue-300"
-                              : "bg-gray-50 mr-4 border-l-2 border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2 mb-1">
-                            <span className="text-xs font-semibold text-gray-600">
-                              {msg.role === "user" ? "You" : "Interviewer"}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                            {msg.content}
-                          </p>
-                        </div>
-                      ))}
-                      
-                      {/* Show current user input being transcribed (in-progress, not yet in history) */}
-                      {(currentUserMessage || interimTranscript) && (conversationState === "user_turn" || conversationState === "waiting") && (
-                        <div className="p-3 rounded-lg bg-blue-50 ml-4 border-l-2 border-blue-300 border-dashed opacity-75">
-                          <div className="flex items-start gap-2 mb-1">
-                            <span className="text-xs font-semibold text-gray-600">You</span>
-                            <span className="text-xs text-gray-400">Speaking...</span>
-                          </div>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                            {currentUserMessage}
-                            {interimTranscript && (
-                              <span className="text-gray-500 italic">{interimTranscript}</span>
-                            )}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* Legacy transcript display (for backward compatibility) */}
-                      {transcript && conversationHistory.length === 0 && (
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                          {transcript}
-                        </p>
-                      )}
-                      
-                      {/* Error message or pending audio notice */}
-                      {errorMessage && (
-                        <div className={`p-3 rounded-lg border-l-2 ${
-                          hasPendingAudio 
-                            ? "bg-blue-50 border-blue-300" 
-                            : "bg-red-50 border-red-300"
-                        }`}>
-                          <p className={`text-sm ${hasPendingAudio ? "text-blue-800" : "text-red-800"}`}>
-                            {errorMessage}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            {hasPendingAudio && (
-                              <button
-                                onClick={playPendingAudio}
-                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                              >
-                                <i className="fa-solid fa-play"></i>
-                                Play Audio
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                setErrorMessage(null);
-                                setHasPendingAudio(false);
-                              }}
-                              className={`text-xs ${hasPendingAudio ? "text-blue-600 hover:text-blue-800" : "text-red-600 hover:text-red-800"}`}
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">
-                      {isListening
-                        ? "Listening... Start speaking to begin the conversation."
-                        : "Waiting to start..."}
-                    </p>
-                  )}
-                </div>
-                {(conversationHistory.length > 0 || transcript) && (
-                  <div className="px-4 py-2 border-t border-border bg-gray-50 flex justify-between items-center">
-                    <button
-                      onClick={() => {
-                        setTranscript("");
-                        setInterimTranscript("");
-                        setConversationHistory([]);
-                        setCurrentUserMessage("");
-                        setErrorMessage(null);
-                      }}
-                      className="text-xs text-gray-600 hover:text-gray-800 transition-colors"
-                    >
-                      Clear Conversation
-                    </button>
-                    <span className="text-xs text-gray-400">
-                      {conversationHistory.length} messages
-                    </span>
-                  </div>
-                )}
-              </div>
-            
-            {/* EXCALIDRAW */}
-            <div className="flex-1 h-full border border-border rounded-lg overflow-hidden">
-              <Excalidraw
-                key={excalidrawKey}
-                initialData={excalidrawJson}
-                ref={excalidrawRef}
-                onReady={(api) => {
-                  excalidrawAPIRef.current = api;
-                }}
-                onChange={(elements, appState, files) => {
-                  excalidrawDataRef.current = { elements, appState, files };
-                }}
-              />
-            </div>
-          </div>
         </div>
-      )}
 
-      {showResults && <Results />}
+      {/* Load Test Diagram Button (Top Right, left of Timer) */}
+      {/* <div className="absolute top-6 right-[300px] z-50">
+        <button
+          onClick={loadTestJSON}
+          className="flex items-center gap-2 bg-white border border-[#e4e4e4] rounded-xl px-4 py-3 hover:bg-[#f5f5f5] transition-colors"
+          title="Load test diagram"
+        >
+          <i className="fa-solid fa-file-import text-black"></i>
+          <span className="text-black font-light text-sm">Load Test Diagram</span>
+        </button>
+      </div> */}
+
+      {/* Timer (Top Right Overlay) */}
+      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
+        <Clock className="w-5 h-5  text-black" strokeWidth={1.3} />
+        <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
+          {formatTime(timeRemaining)}
+        </span>
+        <button
+          onClick={() => setIsPaused((prev) => !prev)}
+          className="ml-2 text-black hover:text-gray-600"
+        >
+          <i className={`fa-solid ${isPaused ? "fa-play" : "fa-pause"}`}></i>
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isGrading}
+          className="ml-2 px-3 py-1 bg-[#3168f5] text-white rounded-lg hover:bg-[#2557d4] transition-colors disabled:opacity-50"
+        >
+          {isGrading ? "Grading..." : "Submit"}
+        </button>
+      </div>
+
+      {/* Interviewer Card (Bottom Left Overlay) */}
+     
+    </div>
     </>
   );
-};
-
-export default Interview;
-
+}

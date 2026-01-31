@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import Results from "./Components/Templates/Results";
 import useStore from "../store/module";
 import Link from "next/link";
+import Refactor from "./refactor/page";
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -105,7 +106,7 @@ export default function Home() {
         {`window.EXCALIDRAW_ASSET_PATH = "https://unpkg.com/@excalidraw/excalidraw/dist/";`}
       </Script>
       
-      <nav className="p-4 flex justify-between items-center border-b border-gray-200 bg-white">
+      {/* <nav className="p-4 flex justify-between items-center border-b border-gray-200 bg-white">
         <div className="flex items-center gap-4">
           <span className="text-lg font-semibold">UXInterviewer</span>
         </div>
@@ -124,7 +125,8 @@ export default function Home() {
         </div>
       </nav>
 
-      <Interview />
+      <Interview /> */}
+      <Refactor />
     </>
   );
 }
