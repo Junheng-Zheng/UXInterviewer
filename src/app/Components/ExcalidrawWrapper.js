@@ -11,7 +11,10 @@ import {
   Minus, 
   Edit3, 
   Type,
-  Eraser
+  Eraser,
+  House,
+  Redo2,
+  MessageCircleQuestionMark,
 } from 'lucide-react';
 
 export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
@@ -40,7 +43,7 @@ export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
 
   const tools = [
     { id: 'selection', icon: MousePointer2, label: 'Select' },
-    { id: 'hand', icon: Hand, label: 'Hand' },
+    // { id: 'hand', icon: Hand, label: 'Hand' },
     { id: 'rectangle', icon: Square, label: 'Rectangle' },
     { id: 'ellipse', icon: Circle, label: 'Circle' },
     { id: 'arrow', icon: ArrowRight, label: 'Arrow' },
@@ -59,9 +62,11 @@ export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
   }
 
   return (
-    <>
+    <div className = "flex rounded-xl overflow-hidden w-full h-full relative">
+
+
       {/* Custom Toolbar with Lucide Icons */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50  bg-white/70 backdrop-blur-sm border border-[#e4e4e4] rounded-xl p-2 flex gap-1">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 z-100  bg-white/40 backdrop-blur-sm border border-[#e4e4e4] border-l-0 rounded-r-xl p-2 flex flex-col gap-1">
         {tools.map((tool) => {
           const Icon = tool.icon;
           return (
@@ -125,7 +130,7 @@ export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
         }}
         renderTopRightUI={() => null}
       />
-    </>
+    </div>
   );
 }
 

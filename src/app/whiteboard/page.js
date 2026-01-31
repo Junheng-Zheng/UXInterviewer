@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mic, MicOff, Clock } from 'lucide-react';
+import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark } from 'lucide-react';
 import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
 import useStore from '../../store/module';
+import { AudioLines, Sparkles, X, Keyboard, MousePointer2 } from 'lucide-react';
 import "@excalidraw/excalidraw/index.css";
 
 // Import exportToBlob for screenshot capture
@@ -51,6 +52,10 @@ export default function WhiteboardPage() {
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [hasPendingAudio, setHasPendingAudio] = useState(false);
+  
+  // Ask questions modal state
+  const [showAskQuestions, setShowAskQuestions] = useState(false);
+  const [question, setQuestion] = useState('');
   
   // Audio playback
   const audioRef = useRef(null);
@@ -462,6 +467,15 @@ export default function WhiteboardPage() {
     }
   };
 
+  // Handle ask question form submission
+  const handleAskQuestion = (e) => {
+    e.preventDefault();
+    console.log('Question submitted:', question);
+    // TODO: Send to AI interviewer API
+    setQuestion('');
+    setShowAskQuestions(false);
+  };
+
   // Handle submit
   const handleSubmit = async () => {
     // Validate that interview parameters are set
@@ -475,7 +489,7 @@ export default function WhiteboardPage() {
     setIsGrading(true);
     
     // Navigate to grading page immediately
-    router.push('/refactor/grading');
+    router.push('/grading');
     
     // Stop speech recognition and audio immediately when submitting
     stopAudio();
@@ -725,150 +739,150 @@ export default function WhiteboardPage() {
   }, []); // Run only on mount
 
   // Initialize Speech Recognition
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
+  // useEffect(() => {
+  //   if (typeof window !== "undefined") {
+  //     const SpeechRecognition =
+  //       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-      if (!SpeechRecognition) {
-        console.warn("Speech Recognition API not supported in this browser");
-        return;
-      }
+  //     if (!SpeechRecognition) {
+  //       console.warn("Speech Recognition API not supported in this browser");
+  //       return;
+  //     }
 
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
+  //     const recognition = new SpeechRecognition();
+  //     recognition.continuous = true;
+  //     recognition.interimResults = true;
+  //     recognition.lang = "en-US";
 
-      recognition.onstart = () => {
-        isRecognitionRunningRef.current = true;
-        // Record start time when recognition begins
-        if (!recognitionStartTimeRef.current) {
-          recognitionStartTimeRef.current = Date.now();
-        }
-        setIsListening(true);
-        setConversationState("waiting");
-      };
+  //     recognition.onstart = () => {
+  //       isRecognitionRunningRef.current = true;
+  //       // Record start time when recognition begins
+  //       if (!recognitionStartTimeRef.current) {
+  //         recognitionStartTimeRef.current = Date.now();
+  //       }
+  //       setIsListening(true);
+  //       setConversationState("waiting");
+  //     };
 
-      recognition.onresult = (event) => {
-        let interimText = "";
-        let finalText = "";
-        let hasNewFinal = false;
+  //     recognition.onresult = (event) => {
+  //       let interimText = "";
+  //       let finalText = "";
+  //       let hasNewFinal = false;
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalText += transcript + " ";
-            hasNewFinal = true;
-          } else {
-            interimText += transcript;
-          }
-        }
+  //       for (let i = event.resultIndex; i < event.results.length; i++) {
+  //         const transcript = event.results[i][0].transcript;
+  //         if (event.results[i].isFinal) {
+  //           finalText += transcript + " ";
+  //           hasNewFinal = true;
+  //         } else {
+  //           interimText += transcript;
+  //         }
+  //       }
 
-        // User interaction detected - unlock audio for future plays
-        if (finalText || interimText) {
-          audioUnlockedRef.current = true;
+  //       // User interaction detected - unlock audio for future plays
+  //       if (finalText || interimText) {
+  //         audioUnlockedRef.current = true;
           
-          // If there's pending audio, try to play it now
-          if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
-            // Stop recognition before AI speaks
-            stopRecognition();
+  //         // If there's pending audio, try to play it now
+  //         if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
+  //           // Stop recognition before AI speaks
+  //           stopRecognition();
             
-            audioRef.current.src = pendingAudioRef.current;
-            audioSourceRef.current = pendingAudioRef.current;
-            setIsAISpeaking(true);
-            setConversationState("ai_turn");
-            setErrorMessage(null);
-            setHasPendingAudio(false);
+  //           audioRef.current.src = pendingAudioRef.current;
+  //           audioSourceRef.current = pendingAudioRef.current;
+  //           setIsAISpeaking(true);
+  //           setConversationState("ai_turn");
+  //           setErrorMessage(null);
+  //           setHasPendingAudio(false);
             
-            audioRef.current.play().then(() => {
-              pendingAudioRef.current = null;
-            }).catch((err) => {
-              console.error("Failed to play pending audio:", err);
-              setIsAISpeaking(false);
-              setConversationState("waiting");
-              // Resume recognition on error
-              startRecognition();
-            });
-          }
-        }
+  //           audioRef.current.play().then(() => {
+  //             pendingAudioRef.current = null;
+  //           }).catch((err) => {
+  //             console.error("Failed to play pending audio:", err);
+  //             setIsAISpeaking(false);
+  //             setConversationState("waiting");
+  //             // Resume recognition on error
+  //             startRecognition();
+  //           });
+  //         }
+  //       }
 
-        // If we're in AI turn or processing, stop audio when user starts speaking
-        // Only allow interruption if recognition was intentionally running (not during AI speech)
-        const currentState = conversationStateRef.current;
-        if ((currentState === "ai_turn" || currentState === "processing") && 
-            (finalText || interimText) && 
-            isRecognitionRunningRef.current) {
-          stopAudio();
-          setConversationState("user_turn");
-          setIsProcessingAI(false);
-          // Clear any pending silence timer
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current);
-          }
-        }
+  //       // If we're in AI turn or processing, stop audio when user starts speaking
+  //       // Only allow interruption if recognition was intentionally running (not during AI speech)
+  //       const currentState = conversationStateRef.current;
+  //       if ((currentState === "ai_turn" || currentState === "processing") && 
+  //           (finalText || interimText) && 
+  //           isRecognitionRunningRef.current) {
+  //         stopAudio();
+  //         setConversationState("user_turn");
+  //         setIsProcessingAI(false);
+  //         // Clear any pending silence timer
+  //         if (silenceTimerRef.current) {
+  //           clearTimeout(silenceTimerRef.current);
+  //         }
+  //       }
 
-        // Add final words to transcript
-        if (finalText) {
-          const finalTextTrimmed = finalText.trim();
-          setTranscript((prev) => prev + finalTextTrimmed + " ");
+  //       // Add final words to transcript
+  //       if (finalText) {
+  //         const finalTextTrimmed = finalText.trim();
+  //         setTranscript((prev) => prev + finalTextTrimmed + " ");
           
-          // Accumulate user message for conversation
-          setCurrentUserMessage((prev) => {
-            const updated = (prev + " " + finalTextTrimmed).trim();
-            // Reset silence timer when we get final text
-            if (hasNewFinal) {
-              resetSilenceTimer();
-            }
-            return updated;
-          });
-        }
+  //         // Accumulate user message for conversation
+  //         setCurrentUserMessage((prev) => {
+  //           const updated = (prev + " " + finalTextTrimmed).trim();
+  //           // Reset silence timer when we get final text
+  //           if (hasNewFinal) {
+  //             resetSilenceTimer();
+  //           }
+  //           return updated;
+  //         });
+  //       }
         
-        // Update interim transcript for real-time display
-        if (interimText) {
-          setInterimTranscript(interimText);
-          // Reset silence timer on any speech activity
-          resetSilenceTimer();
-        } else {
-          setInterimTranscript("");
-        }
-      };
+  //       // Update interim transcript for real-time display
+  //       if (interimText) {
+  //         setInterimTranscript(interimText);
+  //         // Reset silence timer on any speech activity
+  //         resetSilenceTimer();
+  //       } else {
+  //         setInterimTranscript("");
+  //       }
+  //     };
 
-      recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-        if (event.error === "no-speech") {
-          // Restart recognition if no speech detected and interview is active
-          const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-          if (showInterview && !isPausedRef.current) {
-            setTimeout(() => {
-              startRecognition();
-            }, 500);
-          }
-        } else if (event.error === "not-allowed") {
-          alert("Microphone access denied. Please enable microphone permissions.");
-          setIsListening(false);
-        }
-      };
+  //     recognition.onerror = (event) => {
+  //       console.error("Speech recognition error:", event.error);
+  //       if (event.error === "no-speech") {
+  //         // Restart recognition if no speech detected and interview is active
+  //         const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
+  //         if (showInterview && !isPausedRef.current) {
+  //           setTimeout(() => {
+  //             startRecognition();
+  //           }, 500);
+  //         }
+  //       } else if (event.error === "not-allowed") {
+  //         alert("Microphone access denied. Please enable microphone permissions.");
+  //         setIsListening(false);
+  //       }
+  //     };
 
-      recognition.onend = () => {
-        isRecognitionRunningRef.current = false;
-        setIsListening(false);
-        // Only restart recognition if interview is still active and AI is not speaking
-        const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-        if (showInterview && !isPausedRef.current) {
-          setTimeout(() => {
-            startRecognition();
-          }, 500);
-        }
-      };
+  //     recognition.onend = () => {
+  //       isRecognitionRunningRef.current = false;
+  //       setIsListening(false);
+  //       // Only restart recognition if interview is still active and AI is not speaking
+  //       const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
+  //       if (showInterview && !isPausedRef.current) {
+  //         setTimeout(() => {
+  //           startRecognition();
+  //         }, 500);
+  //       }
+  //     };
 
-      recognitionRef.current = recognition;
+  //     recognitionRef.current = recognition;
 
-      return () => {
-        stopRecognition();
-      };
-    }
-  }, []);
+  //     return () => {
+  //       stopRecognition();
+  //     };
+  //   }
+  // }, []);
 
   // Always listen (start recognition when interview is active)
   useEffect(() => {
@@ -938,15 +952,19 @@ export default function WhiteboardPage() {
           justify-content: center !important;
         }
       `}</style>
-      <div className="relative text-sm p-8 w-full h-screen bg-gray-200 ">
+      <div className="relative text-sm flex w-full h-screen ">
         {/* Excalidraw Canvas - Full Screen */}
-              <div className = "absolute top-0 left-0 w-full flex justify-between h-full">
+              {/* <div className = "absolute top-0 left-0 w-full flex justify-between h-full">
         {Array.from({length: 256}).map((_, index) => (
           <div key={index} className="w-px h-full bg-gray-50 rounded-full" />
         ))}
-      </div>
-
-        <div className="w-full h-full relative rounded-xl overflow-hidden">
+      </div> */}
+      <div className = "p-6 flex flex-col gap-6 h-full border-r  border-gray-200">
+    <House  size={24} strokeWidth={1.5}/>
+    <Redo2 size={24} strokeWidth={1.5}/>
+    <MessageCircleQuestionMark size={24} strokeWidth={1.5}/>
+  </div>
+        <div className="flex-1 w-full h-full relative p-3 pl-0 rounded-xl overflow-hidden">
           <ExcalidrawWrapper 
             key={excalidrawKey}
             initialData={excalidrawJson}
@@ -957,50 +975,86 @@ export default function WhiteboardPage() {
               excalidrawDataRef.current = { elements, appState, files };
             }}
           />
-
-
-        <div className="absolute left-12 bottom-12 w-[360px] border border-[#e4e4e4] rounded-xl p-6 bg-white/70 backdrop-blur-sm z-50 flex gap-2.5 items-start">
-
-        {/* Message Content */}
-          <div className="flex-1 font-normal gap-1 flex flex-col min-w-0">
-            
-            {/* Status indicators */}
-            <div className="flex items-center gap-2 mt-2">
-              {isListening && conversationState === "user_turn" && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs text-gray-600">Listening</span>
-                </div>
-              )}
-              {isProcessingAI && (
-                <div className="flex items-center gap-1">
-                  <i className="fa-solid fa-spinner fa-spin text-[#3168f5]"></i>
-                  <span className="text-xs text-gray-600">Thinking...</span>
-                </div>
-              )}
-              {hasPendingAudio && (
-                <button
-                  onClick={playPendingAudio}
-                  className="px-2 py-1 bg-[#3168f5] text-white text-xs rounded hover:bg-[#2557d4]"
-                >
-                  <i className="fa-solid fa-play mr-1"></i>
-                  Play Response
-                </button>
-              )}
-            </div>
-
-                      <h3 className="text-xl text-black font-serif">Interviewer</h3>
-            {conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant'&&  (
-              <p className="text-sm text-black whitespace-pre-wrap">
-                <span>{conversationHistory[conversationHistory.length - 1].content}</span>
-              </p>
-            )
-            }
-
-          </div>
+      <div
+        class="absolute top-0 left-0 z-50 w-full h-full
+              bg-[radial-gradient(circle,rgba(156,163,175,0.3)_1px,transparent_1px)]
+              bg-[size:16px_16px] pointer-events-none">
       </div>
 
+        <div className="flex absolute top-3 left-3 z-50 flex-col gap-2 items-start w-full">
+          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
+            <p className="text-lg text-black">
+              <span className="font-serif px-3 py-2 rounded-lg bg-red-100">DESIGN</span>{' '}
+              <span className="font-light">{design || 'a landing page'}</span>
+            </p>
+          </div>
+          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
+            <p className="text-lg text-black">
+              <span className="font-serif px-3 py-2 rounded-lg bg-blue-100">FOR</span>{' '}
+              <span className="font-light">{target || 'a hospital recipient page'}</span>
+            </p>
+          </div>
+          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
+            <p className="text-lg text-black">
+              <span className="font-serif px-3 py-2 rounded-lg bg-pink-100">TO HELP</span>{' '}
+              <span className="font-light">{tohelp || 'neurodivergent people'}</span>
+            </p>
+          </div>
         </div>
+
+        
+        <div className="absolute left-1/2  p-2 -translate-x-1/2 z-50 bottom-8 flex gap-2 w-fit h-fit rounded-xl  bg-gray-100">
+          {showAskQuestions && (
+            <div className="w-[300px] h-[160px]  flex flex-col bg-white border border-[#e4e4e4] rounded-xl absolute left-1/2 -translate-x-1/2 top-0 translate-y-[calc(-100%-20px)] z-50 p-4">
+
+              <div className = "justify-between flex items-center">
+                <p>Ask question.</p>
+                <X size={16} strokeWidth={1.2} onClick={() => setShowAskQuestions(false)} />
+              </div>
+              <div className = "w-full relative h-full bg-red-500">
+                  <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask your question..."
+                className="w-full h-full absolute top-0 left-0  px-3 py-3 rounded-lg resize-none outline-none text-sm text-black"
+              />
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleAskQuestion(e);
+                }}
+                className="px-3 py-2 absolute bottom-4 right-4 text-sm bg-gray-100 text-black cursor-pointer rounded-xl hover:bg-gray-200"
+              >
+                Ask
+              </button>
+              </div>
+            </div>
+          )}
+                        <div className="h-full aspect-square">
+                <AudioLines size={16} strokeWidth={1.2} />
+              </div>
+
+             <div className = "h-full w-[20px] bg-red-500">
+            </div>
+          
+          <button 
+            onClick={() => setShowAskQuestions(!showAskQuestions)}
+            className="px-3 py-2 bg-red-100 text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2"
+          >
+            <Sparkles size={16} strokeWidth={1.2} />
+            Ask Questions
+          </button>
+          <button className="px-3 py-2 bg-blue-100 text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2">
+            <MessageCircleQuestionMark size={16} strokeWidth={1.2} />
+            Get Feedback
+          </button>
+        </div>
+
+
+      
+
+        </div>
+
 
       {/* Load Test Diagram Button (Top Right, left of Timer) */}
       {/* <div className="absolute top-6 right-[300px] z-50">
@@ -1015,7 +1069,7 @@ export default function WhiteboardPage() {
       </div> */}
 
       {/* Timer (Top Right Overlay) */}
-      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
+      {/* <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
         <Clock className="w-5 h-5  text-black" strokeWidth={1.3} />
         <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
           {formatTime(timeRemaining)}
@@ -1033,7 +1087,7 @@ export default function WhiteboardPage() {
         >
           {isGrading ? "Grading..." : "Submit"}
         </button>
-      </div>
+      </div> */}
 
       {/* Interviewer Card (Bottom Left Overlay) */}
      
@@ -1041,3 +1095,45 @@ export default function WhiteboardPage() {
     </>
   );
 }
+
+
+  // <div className="absolute left-3 bottom-3 w-[360px] border border-[#e4e4e4] rounded-xl p-6 bg-white/70 backdrop-blur-sm z-50 flex gap-2.5 items-start">
+
+  //       {/* Message Content */}
+  //         <div className="flex-1 font-normal gap-1 flex flex-col min-w-0">
+            
+  //           {/* Status indicators */}
+  //           <div className="flex items-center gap-2 mt-2">
+  //             {isListening && conversationState === "user_turn" && (
+  //               <div className="flex items-center gap-1">
+  //                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+  //                 <span className="text-xs text-gray-600">Listening</span>
+  //               </div>
+  //             )}
+  //             {isProcessingAI && (
+  //               <div className="flex items-center gap-1">
+  //                 <i className="fa-solid fa-spinner fa-spin text-[#3168f5]"></i>
+  //                 <span className="text-xs text-gray-600">Thinking...</span>
+  //               </div>
+  //             )}
+  //             {hasPendingAudio && (
+  //               <button
+  //                 onClick={playPendingAudio}
+  //                 className="px-2 py-1 bg-[#3168f5] text-white text-xs rounded hover:bg-[#2557d4]"
+  //               >
+  //                 <i className="fa-solid fa-play mr-1"></i>
+  //                 Play Response
+  //               </button>
+  //             )}
+  //           </div>
+
+  //                     <h3 className="text-xl text-black font-serif">Interviewer</h3>
+  //           {conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant'&&  (
+  //             <p className="text-sm text-black whitespace-pre-wrap">
+  //               <span>{conversationHistory[conversationHistory.length - 1].content}</span>
+  //             </p>
+  //           )
+  //           }
+
+  //         </div>
+  //     </div>
