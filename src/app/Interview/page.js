@@ -641,6 +641,7 @@ const Interview = () => {
       recognition.lang = "en-US";
 
       recognition.onstart = () => {
+        console.log("[Speech] onstart fired - setting isListening to true");
         isRecognitionRunningRef.current = true;
         // Record start time when recognition begins
         if (!recognitionStartTimeRef.current) {
@@ -738,7 +739,14 @@ const Interview = () => {
       };
 
       recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
+        console.log("[Speech] onerror fired:", event.error);
+        if (event.error === "audio-capture") {
+          // Microphone not available or in use by another app
+          console.error("Microphone audio capture failed - check if another app is using the mic");
+          setErrorMessage("Cannot access microphone. Please close other apps using the mic and refresh.");
+          setIsListening(false);
+          return;
+        }
         if (event.error === "no-speech") {
           // Restart recognition if no speech detected and interview is active
           // Use refs to get current state values
@@ -785,6 +793,7 @@ const Interview = () => {
       };
 
       recognition.onend = () => {
+        console.log("[Speech] onend fired - setting isListening to false");
         isRecognitionRunningRef.current = false;
         setIsListening(false);
         // Only restart recognition if interview is still active (not submitted and time remaining)
@@ -827,8 +836,16 @@ const Interview = () => {
       // Start recognition when interview is active
       // Add small delay to avoid race conditions
       const timeoutId = setTimeout(() => {
+        console.log("[Speech] Checking start conditions:", {
+          hasRecognition: !!recognitionRef.current,
+          secondsLeft,
+          isSubmitted,
+          isPaused,
+          isRecognitionRunning: isRecognitionRunningRef.current
+        });
         if (recognitionRef.current && secondsLeft > 0 && !isSubmitted && !isPaused && !isRecognitionRunningRef.current) {
           try {
+            console.log("[Speech] Calling recognition.start()");
             recognitionRef.current.start();
             // onstart handler will set isListening and start time
             

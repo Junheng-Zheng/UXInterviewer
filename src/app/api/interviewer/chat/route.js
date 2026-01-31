@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { openai } from "@/lib/openai";
 
 // Get interviewer system prompt from environment variable
 const INTERVIEWER_SYSTEM_PROMPT = process.env.INTERVIEWER_SYSTEM_PROMPT || `You are a professional UX design interviewer conducting a design challenge interview. Your role is to:
@@ -26,23 +27,11 @@ export async function POST(request) {
       );
     }
 
-    // Check if OpenAI API key is configured
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "OpenAI API key not configured",
-          message: "Please set OPENAI_API_KEY in your environment variables.",
-        },
-        { status: 500 }
-      );
-    }
-
     // Build conversation messages
     const messages = [
       {
         role: "system",
-        content: INTERVIEWER_SYSTEM_PROMPT + (design && target && tohelp 
+        content: INTERVIEWER_SYSTEM_PROMPT + (design && target && tohelp
           ? `\n\nContext: The candidate is designing ${design} for ${target} to help ${tohelp}.`
           : ""),
       },
@@ -68,75 +57,18 @@ export async function POST(request) {
       });
     }
 
-    // Prepare request payload
-    const requestPayload = {
-      model: "gpt-4o-mini", // Using faster model for real-time conversation
+    // Call OpenAI API using SDK
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: messages,
       temperature: 0.7,
-      max_tokens: 200, // Keep responses concise for TTS
-    };
+      max_tokens: 200,
+    });
 
-    // Call OpenAI API with retry logic for rate limits
-    let response;
-    let retries = 0;
-    const maxRetries = 3;
-
-    while (retries <= maxRetries) {
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(requestPayload),
-      });
-
-      // If not rate limited, break out of retry loop
-      if (response.status !== 429 || retries >= maxRetries) {
-        break;
-      }
-
-      // Wait before retrying (exponential backoff)
-      const retryAfter = response.headers.get("retry-after");
-      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retries) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-      retries++;
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-
-      // Handle rate limiting specifically
-      if (response.status === 429) {
-        const retryAfter = response.headers.get("retry-after");
-        return NextResponse.json(
-          {
-            error: "Rate limit exceeded",
-            message: retryAfter
-              ? `Too many requests. Please try again in ${retryAfter} seconds.`
-              : "Too many requests. Please try again in a few moments.",
-            retryAfter: retryAfter ? parseInt(retryAfter) : null,
-          },
-          { status: 429 }
-        );
-      }
-
-      // Handle other OpenAI API errors
-      return NextResponse.json(
-        {
-          error: "Failed to generate response",
-          message: errorData.error?.message || "An error occurred while generating the interviewer response.",
-          details: errorData,
-        },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
+    const content = completion.choices[0]?.message?.content;
 
     if (!content) {
-      console.error("No content received from OpenAI. Full response:", JSON.stringify(data, null, 2));
+      console.error("No content received from OpenAI. Full response:", JSON.stringify(completion, null, 2));
       return NextResponse.json(
         { error: "No content received from OpenAI", details: "The API response did not contain any content." },
         { status: 500 }
@@ -153,6 +85,18 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Error in interviewer chat endpoint:", error);
+
+    // Handle rate limiting
+    if (error.status === 429) {
+      return NextResponse.json(
+        {
+          error: "Rate limit exceeded",
+          message: "Too many requests. Please try again in a few moments.",
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error",
@@ -162,4 +106,3 @@ export async function POST(request) {
     );
   }
 }
-
