@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+
 
 const ConfirmSignup = () => {
   const [code, setCode] = useState("");
@@ -187,5 +190,11 @@ const ConfirmSignup = () => {
   );
 };
 
-export default ConfirmSignup;
+export default function ConfirmSignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConfirmSignup />
+    </Suspense>
+  );
+}
 
