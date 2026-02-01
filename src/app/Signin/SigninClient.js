@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getAndClearReturnUrl } from "@/lib/client-auth";
-import { Suspense } from "react";
 
 
 const SignIn = () => {
