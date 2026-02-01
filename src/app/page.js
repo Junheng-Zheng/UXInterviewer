@@ -71,7 +71,7 @@ export default function Home() {
               href="/Signin"
               className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
             >
-              Sign In
+              Sign In Now
             </Link>
             <Link
               href="/Signup"
