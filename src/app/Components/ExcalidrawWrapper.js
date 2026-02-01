@@ -66,7 +66,7 @@ export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
 
 
       {/* Custom Toolbar with Lucide Icons */}
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 z-100  bg-white/40 backdrop-blur-sm border border-[#e4e4e4] border-l-0 rounded-r-xl p-2 flex flex-col gap-1">
+            <div className="absolute left-1/2 -translate-x-1/2 top-8 z-100  bg-white/40 backdrop-blur-sm border border-[#e4e4e4] rounded-xl p-2 flex  gap-1">
         {tools.map((tool) => {
           const Icon = tool.icon;
           return (

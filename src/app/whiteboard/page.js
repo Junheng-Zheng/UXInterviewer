@@ -54,8 +54,17 @@ export default function WhiteboardPage() {
   const [hasPendingAudio, setHasPendingAudio] = useState(false);
   
   // Ask questions modal state
-  const [showAskQuestions, setShowAskQuestions] = useState(false);
+  const [showAskQuestions, setShowAskQuestions] = useState(true); // Show by default
   const [question, setQuestion] = useState('');
+  
+  // Input mode state (speech or keyboard)
+  const [inputMode, setInputMode] = useState('keyboard'); // 'speech' or 'keyboard'
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [audioLevels, setAudioLevels] = useState(Array(20).fill(0));
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const micStreamRef = useRef(null);
+  const animationFrameRef = useRef(null);
   
   // Audio playback
   const audioRef = useRef(null);
@@ -69,6 +78,7 @@ export default function WhiteboardPage() {
   const conversationStateRef = useRef("waiting");
   const currentUserMessageRef = useRef("");
   const isProcessingAIRef = useRef(false);
+  const isAISpeakingRef = useRef(false);
   const SILENCE_THRESHOLD_MS = 1750; // 1.75 seconds
   
   const recognitionStartTimeRef = useRef(null);
@@ -82,6 +92,9 @@ export default function WhiteboardPage() {
   const aiJustFinishedRef = useRef(false); // Track if AI just finished speaking
 
   const excalidrawAPIRef = useRef(null);
+  const conversationBoxRef = useRef(null);
+  const hasInitialGreetingRef = useRef(false);
+  const inputModeRef = useRef(inputMode);
   
   const [interviewerMessage, setInterviewerMessage] = useState({
     visible: "",
@@ -116,7 +129,8 @@ export default function WhiteboardPage() {
   // Start speech recognition safely
   const startRecognition = () => {
     const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
-    if (showInterview && recognitionRef.current && !isRecognitionRunningRef.current) {
+    // Only start recognition if in speech mode
+    if (showInterview && inputModeRef.current === 'speech' && recognitionRef.current && !isRecognitionRunningRef.current) {
       try {
         recognitionRef.current.start();
         isRecognitionRunningRef.current = true;
@@ -470,11 +484,206 @@ export default function WhiteboardPage() {
   // Handle ask question form submission
   const handleAskQuestion = (e) => {
     e.preventDefault();
+    if (!question.trim()) return;
+    
     console.log('Question submitted:', question);
-    // TODO: Send to AI interviewer API
+    
+    // Unlock audio on user interaction
+    audioUnlockedRef.current = true;
+    
+    // Generate AI response with the text input
+    generateAIResponse(question);
+    
     setQuestion('');
-    setShowAskQuestions(false);
+    // Don't close the modal or switch modes - stay in keyboard mode
   };
+
+  // Start microphone for voice visualization
+  const startMicrophone = async () => {
+    // Prevent starting if already active (check refs, not state)
+    if (micStreamRef.current && audioContextRef.current && analyserRef.current) {
+      console.log('Microphone already active, skipping start');
+      return;
+    }
+    
+    // Clean up any existing resources first
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (analyserRef.current) {
+      analyserRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    try {
+      console.log('Starting microphone...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024; // Higher resolution for more detail
+      analyser.smoothingTimeConstant = 0.7; // Balance between smooth and responsive
+      analyser.minDecibels = -90; // Capture quieter sounds
+      analyser.maxDecibels = -10; // Better dynamic range
+      analyserRef.current = analyser;
+      
+      const microphone = audioContext.createMediaStreamSource(stream);
+      microphone.connect(analyser);
+      
+      setIsMicActive(true);
+      console.log('Microphone started successfully, starting visualization');
+      visualizeAudio();
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      setIsMicActive(false); // Reset on error
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  // Stop microphone
+  const stopMicrophone = () => {
+    console.log('Stopping microphone...');
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (analyserRef.current) {
+      analyserRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setIsMicActive(false);
+    setAudioLevels(Array(20).fill(0));
+    console.log('Microphone stopped');
+  };
+
+  // Visualize audio level
+  const visualizeAudio = () => {
+    if (!analyserRef.current) {
+      return;
+    }
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    const barCount = 20;
+    
+    const animate = () => {
+      if (!analyserRef.current) return;
+      
+      analyserRef.current.getByteFrequencyData(dataArray);
+      
+      // Calculate average audio level across all frequencies
+      const sum = dataArray.reduce((a, b) => a + b, 0);
+      const average = sum / dataArray.length;
+      const baseLevel = Math.min(1, (average / 255) * 4); // Amplify by 4x
+      
+      // Create symmetrical bars from center
+      const mirroredBars = [];
+      const halfCount = Math.floor(barCount / 2);
+      
+      // Create bars growing from center outward
+      for (let i = 0; i < halfCount; i++) {
+        // Distance from center (0 = center, increases outward)
+        const distanceFromCenter = i / halfCount;
+        // Apply falloff - center is full, edges diminish
+        const falloff = 1 - Math.pow(distanceFromCenter, 2); // Quadratic falloff
+        const level = baseLevel * falloff;
+        mirroredBars.push(level);
+      }
+      
+      // Reverse to create left side (smallest to largest)
+      const leftSide = [...mirroredBars].reverse();
+      // Combine: left side + right side
+      const finalBars = [...leftSide, ...mirroredBars];
+      
+      setAudioLevels(finalBars);
+      
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    
+    animate();
+  };
+
+  // Toggle microphone
+  const toggleMicrophone = () => {
+    if (isMicActive) {
+      stopMicrophone();
+    } else {
+      startMicrophone();
+    }
+  };
+
+  // Cleanup microphone on unmount
+  useEffect(() => {
+    return () => {
+      stopMicrophone();
+    };
+  }, []);
+
+  // Stop microphone when switching to keyboard mode
+  useEffect(() => {
+    if (inputMode === 'keyboard') {
+      stopMicrophone();
+    }
+  }, [inputMode]);
+
+  // Auto-start microphone on mount only if in speech mode
+  useEffect(() => {
+    const initMic = async () => {
+      try {
+        // Only initialize if in speech mode
+        if (inputMode !== 'speech') {
+          return;
+        }
+        
+        if (micStreamRef.current || audioContextRef.current) {
+          return; // Already initialized
+        }
+        
+        console.log('Initializing microphone on mount...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+        
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioContextRef.current = audioContext;
+        
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.7;
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = -10;
+        analyserRef.current = analyser;
+        
+        const microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        
+        setIsMicActive(true);
+        console.log('Microphone initialized successfully');
+        visualizeAudio();
+      } catch (err) {
+        console.error('Error initializing microphone:', err);
+      }
+    };
+    
+    const timer = setTimeout(initMic, 100);
+    return () => clearTimeout(timer);
+  }, [inputMode]); // Re-run when inputMode changes
 
   // Handle submit
   const handleSubmit = async () => {
@@ -707,6 +916,14 @@ export default function WhiteboardPage() {
     isProcessingAIRef.current = isProcessingAI;
   }, [isProcessingAI]);
 
+  useEffect(() => {
+    isAISpeakingRef.current = isAISpeaking;
+  }, [isAISpeaking]);
+
+  useEffect(() => {
+    inputModeRef.current = inputMode;
+  }, [inputMode]);
+
   // Countdown timer
   useEffect(() => {
     if (timeRemaining <= 0 || isPaused || isSubmitted) return;
@@ -738,173 +955,219 @@ export default function WhiteboardPage() {
     }
   }, []); // Run only on mount
 
+  // Auto-scroll conversation box to bottom when messages change
+  useEffect(() => {
+    if (conversationBoxRef.current) {
+      conversationBoxRef.current.scrollTop = conversationBoxRef.current.scrollHeight;
+    }
+  }, [conversationHistory, currentUserMessage, interimTranscript, isProcessingAI]);
+
+  // Generate initial AI greeting when interview starts
+  useEffect(() => {
+    if (design && target && tohelp && !hasInitialGreetingRef.current) {
+      hasInitialGreetingRef.current = true;
+      // Small delay to let everything initialize
+      const timer = setTimeout(() => {
+        generateAIResponse("", true); // Empty transcript, isInitialGreeting = true
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design, target, tohelp]);
+
   // Initialize Speech Recognition
-  // useEffect(() => {
-  //   if (typeof window !== "undefined") {
-  //     const SpeechRecognition =
-  //       window.SpeechRecognition || window.webkitSpeechRecognition;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  //     if (!SpeechRecognition) {
-  //       console.warn("Speech Recognition API not supported in this browser");
-  //       return;
-  //     }
+      if (!SpeechRecognition) {
+        console.warn("Speech Recognition API not supported in this browser");
+        return;
+      }
 
-  //     const recognition = new SpeechRecognition();
-  //     recognition.continuous = true;
-  //     recognition.interimResults = true;
-  //     recognition.lang = "en-US";
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
 
-  //     recognition.onstart = () => {
-  //       isRecognitionRunningRef.current = true;
-  //       // Record start time when recognition begins
-  //       if (!recognitionStartTimeRef.current) {
-  //         recognitionStartTimeRef.current = Date.now();
-  //       }
-  //       setIsListening(true);
-  //       setConversationState("waiting");
-  //     };
+      recognition.onstart = () => {
+        isRecognitionRunningRef.current = true;
+        // Record start time when recognition begins
+        if (!recognitionStartTimeRef.current) {
+          recognitionStartTimeRef.current = Date.now();
+        }
+        setIsListening(true);
+        setConversationState("waiting");
+      };
 
-  //     recognition.onresult = (event) => {
-  //       let interimText = "";
-  //       let finalText = "";
-  //       let hasNewFinal = false;
-
-  //       for (let i = event.resultIndex; i < event.results.length; i++) {
-  //         const transcript = event.results[i][0].transcript;
-  //         if (event.results[i].isFinal) {
-  //           finalText += transcript + " ";
-  //           hasNewFinal = true;
-  //         } else {
-  //           interimText += transcript;
-  //         }
-  //       }
-
-  //       // User interaction detected - unlock audio for future plays
-  //       if (finalText || interimText) {
-  //         audioUnlockedRef.current = true;
-          
-  //         // If there's pending audio, try to play it now
-  //         if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
-  //           // Stop recognition before AI speaks
-  //           stopRecognition();
-            
-  //           audioRef.current.src = pendingAudioRef.current;
-  //           audioSourceRef.current = pendingAudioRef.current;
-  //           setIsAISpeaking(true);
-  //           setConversationState("ai_turn");
-  //           setErrorMessage(null);
-  //           setHasPendingAudio(false);
-            
-  //           audioRef.current.play().then(() => {
-  //             pendingAudioRef.current = null;
-  //           }).catch((err) => {
-  //             console.error("Failed to play pending audio:", err);
-  //             setIsAISpeaking(false);
-  //             setConversationState("waiting");
-  //             // Resume recognition on error
-  //             startRecognition();
-  //           });
-  //         }
-  //       }
-
-  //       // If we're in AI turn or processing, stop audio when user starts speaking
-  //       // Only allow interruption if recognition was intentionally running (not during AI speech)
-  //       const currentState = conversationStateRef.current;
-  //       if ((currentState === "ai_turn" || currentState === "processing") && 
-  //           (finalText || interimText) && 
-  //           isRecognitionRunningRef.current) {
-  //         stopAudio();
-  //         setConversationState("user_turn");
-  //         setIsProcessingAI(false);
-  //         // Clear any pending silence timer
-  //         if (silenceTimerRef.current) {
-  //           clearTimeout(silenceTimerRef.current);
-  //         }
-  //       }
-
-  //       // Add final words to transcript
-  //       if (finalText) {
-  //         const finalTextTrimmed = finalText.trim();
-  //         setTranscript((prev) => prev + finalTextTrimmed + " ");
-          
-  //         // Accumulate user message for conversation
-  //         setCurrentUserMessage((prev) => {
-  //           const updated = (prev + " " + finalTextTrimmed).trim();
-  //           // Reset silence timer when we get final text
-  //           if (hasNewFinal) {
-  //             resetSilenceTimer();
-  //           }
-  //           return updated;
-  //         });
-  //       }
+      recognition.onresult = (event) => {
+        // Ignore all transcription results while AI is speaking
+        if (isAISpeakingRef.current || conversationStateRef.current === "ai_turn") {
+          console.log("Ignoring speech recognition during AI speech");
+          return;
+        }
         
-  //       // Update interim transcript for real-time display
-  //       if (interimText) {
-  //         setInterimTranscript(interimText);
-  //         // Reset silence timer on any speech activity
-  //         resetSilenceTimer();
-  //       } else {
-  //         setInterimTranscript("");
-  //       }
-  //     };
+        let interimText = "";
+        let finalText = "";
+        let hasNewFinal = false;
 
-  //     recognition.onerror = (event) => {
-  //       console.error("Speech recognition error:", event.error);
-  //       if (event.error === "no-speech") {
-  //         // Restart recognition if no speech detected and interview is active
-  //         const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-  //         if (showInterview && !isPausedRef.current) {
-  //           setTimeout(() => {
-  //             startRecognition();
-  //           }, 500);
-  //         }
-  //       } else if (event.error === "not-allowed") {
-  //         alert("Microphone access denied. Please enable microphone permissions.");
-  //         setIsListening(false);
-  //       }
-  //     };
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += transcript + " ";
+            hasNewFinal = true;
+          } else {
+            interimText += transcript;
+          }
+        }
 
-  //     recognition.onend = () => {
-  //       isRecognitionRunningRef.current = false;
-  //       setIsListening(false);
-  //       // Only restart recognition if interview is still active and AI is not speaking
-  //       const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-  //       if (showInterview && !isPausedRef.current) {
-  //         setTimeout(() => {
-  //           startRecognition();
-  //         }, 500);
-  //       }
-  //     };
+        // User interaction detected - unlock audio for future plays
+        if (finalText || interimText) {
+          audioUnlockedRef.current = true;
+          
+          // If there's pending audio, try to play it now
+          if (pendingAudioRef.current && audioRef.current && !isAISpeaking) {
+            // Stop recognition before AI speaks
+            stopRecognition();
+            
+            audioRef.current.src = pendingAudioRef.current;
+            audioSourceRef.current = pendingAudioRef.current;
+            setIsAISpeaking(true);
+            setConversationState("ai_turn");
+            setErrorMessage(null);
+            setHasPendingAudio(false);
+            
+            audioRef.current.play().then(() => {
+              pendingAudioRef.current = null;
+            }).catch((err) => {
+              console.error("Failed to play pending audio:", err);
+              setIsAISpeaking(false);
+              setConversationState("waiting");
+              // Resume recognition on error
+              startRecognition();
+            });
+          }
+        }
 
-  //     recognitionRef.current = recognition;
+        // If we're in AI turn or processing, stop audio when user starts speaking
+        // Only allow interruption if recognition was intentionally running (not during AI speech)
+        const currentState = conversationStateRef.current;
+        if ((currentState === "ai_turn" || currentState === "processing") && 
+            (finalText || interimText) && 
+            isRecognitionRunningRef.current) {
+          stopAudio();
+          setConversationState("user_turn");
+          setIsProcessingAI(false);
+          // Clear any pending silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+          }
+        }
 
-  //     return () => {
-  //       stopRecognition();
-  //     };
-  //   }
-  // }, []);
+        // Add final words to transcript
+        if (finalText) {
+          const finalTextTrimmed = finalText.trim();
+          setTranscript((prev) => prev + finalTextTrimmed + " ");
+          
+          // Accumulate user message for conversation
+          setCurrentUserMessage((prev) => {
+            const updated = (prev + " " + finalTextTrimmed).trim();
+            // Reset silence timer when we get final text
+            if (hasNewFinal) {
+              resetSilenceTimer();
+            }
+            return updated;
+          });
+        }
+        
+        // Update interim transcript for real-time display
+        if (interimText) {
+          setInterimTranscript(interimText);
+          // Reset silence timer on any speech activity
+          resetSilenceTimer();
+        } else {
+          setInterimTranscript("");
+        }
+      };
 
-  // Always listen (start recognition when interview is active)
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === "no-speech") {
+          // Restart recognition if no speech detected and interview is active
+          const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
+          if (showInterview && !isPausedRef.current) {
+            setTimeout(() => {
+              startRecognition();
+            }, 500);
+          }
+        } else if (event.error === "not-allowed") {
+          alert("Microphone access denied. Please enable microphone permissions.");
+          setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        // Only restart recognition if interview is still active and AI is not speaking
+        const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
+        if (showInterview && !isPausedRef.current) {
+          setTimeout(() => {
+            startRecognition();
+          }, 500);
+        }
+      };
+
+      recognitionRef.current = recognition;
+
+      return () => {
+        stopRecognition();
+      };
+    }
+  }, []);
+
+  // Always listen (start recognition when interview is active and in speech mode)
   useEffect(() => {
     if (!recognitionRef.current) return;
 
     const showInterview = timeRemaining > 0 && !isSubmitted;
     
+    // If not in speech mode, make sure recognition is stopped
+    if (inputMode !== 'speech') {
+      stopRecognition();
+      return;
+    }
+    
     if (showInterview && !isPaused) {
-      // Start recognition when interview is active (only if not during AI speech)
-      const timeoutId = setTimeout(() => {
-        // Don't start if AI is speaking
-        if (!isAISpeaking) {
-          startRecognition();
+      if (isAISpeaking) {
+        // Immediately stop recognition when AI starts speaking
+        stopRecognition();
+        // Clear any accumulated user message and interim transcript
+        setCurrentUserMessage("");
+        currentUserMessageRef.current = "";
+        setInterimTranscript("");
+        // Clear silence timer
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
         }
-      }, 100);
+      } else {
+        // Start recognition when interview is active and AI is not speaking
+        const timeoutId = setTimeout(() => {
+          // Double-check AI is not speaking and still in speech mode
+          if (!isAISpeaking && inputMode === 'speech') {
+            startRecognition();
+          }
+        }, 100);
 
-      return () => clearTimeout(timeoutId);
+        return () => clearTimeout(timeoutId);
+      }
     } else {
       // Stop recognition when interview ends, is paused, or results are shown
       stopRecognition();
     }
-  }, [isSubmitted, isPaused, timeRemaining, isAISpeaking]);
+  }, [isSubmitted, isPaused, timeRemaining, isAISpeaking, inputMode]);
 
   // Format time as MM:SS
   const formatTime = (seconds) => {
@@ -916,6 +1179,15 @@ export default function WhiteboardPage() {
   return (
     <>
       <style jsx global>{`
+        /* Hide scrollbar */
+        .scrollbar-hide {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;  /* Chrome, Safari and Opera */
+        }
+        
         /* Hamburger Menu - Multiple selectors to catch it */
         .excalidraw .layer-ui__wrapper__footer-left,
         .excalidraw .layer-ui__wrapper__footer-left button,
@@ -980,8 +1252,8 @@ export default function WhiteboardPage() {
               bg-[radial-gradient(circle,rgba(156,163,175,0.3)_1px,transparent_1px)]
               bg-[size:16px_16px] pointer-events-none">
       </div>
-
-        <div className="flex absolute top-3 left-3 z-50 flex-col gap-2 items-start w-full">
+      <div className = "absolute h-full left-0 p-8 z-50 flex-col flex justify-between top-0">
+        <div className="flex  flex-col gap-2 items-start w-full">
           <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
             <p className="text-lg text-black">
               <span className="font-serif px-3 py-2 rounded-lg bg-red-100">DESIGN</span>{' '}
@@ -1002,56 +1274,195 @@ export default function WhiteboardPage() {
           </div>
         </div>
 
-        
-        <div className="absolute left-1/2  p-2 -translate-x-1/2 z-50 bottom-8 flex gap-2 w-fit h-fit rounded-xl  bg-gray-100">
-          {showAskQuestions && (
-            <div className="w-[300px] h-[160px]  flex flex-col bg-white border border-[#e4e4e4] rounded-xl absolute left-1/2 -translate-x-1/2 top-0 translate-y-[calc(-100%-20px)] z-50 p-4">
-
-              <div className = "justify-between flex items-center">
-                <p>Ask question.</p>
-                <X size={16} strokeWidth={1.2} onClick={() => setShowAskQuestions(false)} />
+        <div className = " flex-col flex gap-3">
+          <div ref={conversationBoxRef} className = "h-[200px]  w-full bg-gray-100 border p-3 border-gray-100  overflow-y-auto rounded-xl z-50 flex flex-col gap-2 scrollbar-hide">
+            {/* Conversation history */}
+            {conversationHistory.map((msg, index) => (
+              <div key={index} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`px-3 py-2 rounded-lg max-w-[300px] ${
+                  msg.role === 'user' 
+                    ? 'bg-blue-100 text-black' 
+                    : 'bg-white text-black border border-gray-200'
+                }`}>
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                </div>
               </div>
-              <div className = "w-full relative h-full bg-red-500">
-                  <textarea
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Ask your question..."
-                className="w-full h-full absolute top-0 left-0  px-3 py-3 rounded-lg resize-none outline-none text-sm text-black"
-              />
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleAskQuestion(e);
-                }}
-                className="px-3 py-2 absolute bottom-4 right-4 text-sm bg-gray-100 text-black cursor-pointer rounded-xl hover:bg-gray-200"
-              >
-                Ask
-              </button>
+            ))}
+            
+            {/* Current user message being typed/spoken */}
+            {(currentUserMessage || interimTranscript) && (
+              <div className="flex flex-col gap-1 items-end">
+                <div className="px-3 py-2 rounded-lg max-w-[300px] bg-blue-50 text-black border border-blue-200">
+                  <p className="text-sm whitespace-pre-wrap">
+                    {currentUserMessage} <span className="text-gray-400">{interimTranscript}</span>
+                  </p>
+                </div>
               </div>
+            )}
+            
+            {/* AI processing indicator */}
+            {isProcessingAI && (
+              <div className="flex flex-col gap-1 items-start">
+                <div className="px-3 py-2 rounded-lg bg-white text-black border border-gray-200">
+                  <p className="text-sm text-gray-500">
+                    <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                    Thinking...
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Error message */}
+            {/* {errorMessage && (
+              <div className="flex flex-col gap-1 items-center">
+                <div className="px-3 py-2 rounded-lg bg-red-50 text-red-600 border border-red-200">
+                  <p className="text-sm">{errorMessage}</p>
+                </div>
+              </div>
+            )} */}
+            
+            {/* Pending audio play button */}
+            {hasPendingAudio && (
+              <div className="flex flex-col gap-1 items-center">
+                <button
+                  onClick={playPendingAudio}
+                  className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                >
+                  <i className="fa-solid fa-play"></i>
+                  Play Response
+                </button>
+              </div>
+            )}
+          </div>
+            <div className="w-full  h-fit  gap-2 flex p-2 bg-white border border-gray-100  overflow-hidden rounded-xl z-50 ">
+              {inputMode === 'keyboard' ? (
+                <>
+                  <input
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={() => {
+                      // Unlock audio on first keypress
+                      audioUnlockedRef.current = true;
+                    }}
+                    placeholder="Ask a question"
+                    className="w-full  rounded-lg bg-gray-50 px-3 py-2 resize-none outline-none text-sm text-black"
+                  />
+                  <button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleAskQuestion(e);
+                    }}
+                    className="px-3 py-2  text-sm bg-white border border-gray-100  text-black cursor-pointer rounded-xl hover:bg-gray-100"
+                  >
+                    Ask
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Wavelength Visualization */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg flex-1">
+                    <div className="flex items-center justify-center gap-1 flex-1 h-full">
+                      {audioLevels.map((level, i) => {
+                        // Calculate distance from center for visual effect
+                        const center = audioLevels.length / 2;
+                        const distanceFromCenter = Math.abs(i - center) / center;
+                        
+                        // Height calculation - invisible when silent, tall when loud
+                        const minHeight = 2;
+                        const maxHeight = 1000;
+                        const height = isMicActive && level > 0.01
+                          ? minHeight + level * (maxHeight - minHeight)
+                          : 0; // Completely invisible when silent
+                        
+                        // Dynamic width - center bars slightly wider
+                        const width = 1 + (1 - distanceFromCenter) * 0.5;
+                        
+                        return (
+                          <div
+                            key={i}
+                            className="bg-red-400 rounded-full transition-all duration-75 ease-out"
+                            style={{
+                              height: `${height}%`,
+                              width: `${width * 4}px`,
+                              opacity: level > 0.01 ? 0.5 + level * 0.5 : 0
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {/* Mic Button */}
+                  <button 
+                    onClick={toggleMicrophone}
+                    className={`px-3 py-2 text-sm  flex items-center gap-2 cursor-pointer rounded-xl transition-colors ${
+                      isMicActive 
+                        ? 'bg-white border border-gray-100 hover:bg-gray-100' 
+                        : 'bg-red-200 hover:bg-red-300'
+                    }`}
+                  >
+                    {isMicActive ? <Mic size={16} /> : <MicOff size={16} />}
+                    {isMicActive ? 'Mute' : 'Unmute'}
+                  </button>
+                </>
+              )}
             </div>
-          )}
-                        <div className="h-full aspect-square">
-                <AudioLines size={16} strokeWidth={1.2} />
-              </div>
+        <div className="items-center relative flex  w-fit h-fit rounded-xl  bg-gray-100">
 
-             <div className = "h-full w-[20px] bg-red-500">
-            </div>
-          
-          <button 
-            onClick={() => setShowAskQuestions(!showAskQuestions)}
-            className="px-3 py-2 bg-red-100 text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2"
-          >
-            <Sparkles size={16} strokeWidth={1.2} />
-            Ask Questions
+           <div className = "flex w-fit p-2 px-4  font-serif text-lg bg items-center gap-2">
+          Input
+           </div>
+            <div className = "w-px  self-stretch bg-gray-200" />
+
+                <div className = "flex gap-2  p-2 items-center rounded-xl">
+                  <button 
+                    onClick={() => {
+                      if (inputMode !== 'keyboard') {
+                        setInputMode('keyboard');
+                        setShowAskQuestions(true);
+                        stopMicrophone(); // Stop mic when switching to keyboard mode
+                        stopRecognition(); // Stop speech recognition when switching to keyboard mode
+                        // Clear any transcription state
+                        setCurrentUserMessage("");
+                        currentUserMessageRef.current = "";
+                        setInterimTranscript("");
+                      }
+                    }}
+                    className={`h-full px-3 py-2 rounded-xl gap-2 flex-nowrap cursor-pointer flex items-center justify-center ${
+                      inputMode === 'keyboard' ? 'bg-red-100' : 'bg-white'
+                    }`}
+                  >
+                    <Keyboard size={16} strokeWidth={1.2} /> Text
+                  </button>
+                                    <button 
+                    onClick={async () => {
+                      if (inputMode !== 'speech') {
+                        setInputMode('speech');
+                        setShowAskQuestions(true);
+                        // Small delay to ensure state updates, then start mic
+                        setTimeout(() => startMicrophone(), 50);
+                      }
+                    }}
+                    className={`h-full px-3 py-2 rounded-xl gap-2 cursor-pointer flex items-center justify-center ${
+                      inputMode === 'speech' ? 'bg-red-100' : 'bg-white'
+                    }`}
+                  >
+                    <AudioLines size={16} strokeWidth={1.2} /> Speech
+                  </button>
+
+                </div>
+          <div className = "w-px  self-stretch bg-gray-200" />
+          <div className = "flex w-fit  p-2 items-center gap-2">
+            <button className="px-3 py-2 bg-blue-100 h-fit text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2">
+              <Sparkles size={16} strokeWidth={1.2} />
+            Feedback
           </button>
-          <button className="px-3 py-2 bg-blue-100 text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2">
-            <MessageCircleQuestionMark size={16} strokeWidth={1.2} />
-            Get Feedback
-          </button>
+          </div>
+      
+        </div>
+       
         </div>
 
-
-      
+      </div>
 
         </div>
 
@@ -1069,7 +1480,7 @@ export default function WhiteboardPage() {
       </div> */}
 
       {/* Timer (Top Right Overlay) */}
-      {/* <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
+      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
         <Clock className="w-5 h-5  text-black" strokeWidth={1.3} />
         <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
           {formatTime(timeRemaining)}
@@ -1087,7 +1498,7 @@ export default function WhiteboardPage() {
         >
           {isGrading ? "Grading..." : "Submit"}
         </button>
-      </div> */}
+      </div>
 
       {/* Interviewer Card (Bottom Left Overlay) */}
      
