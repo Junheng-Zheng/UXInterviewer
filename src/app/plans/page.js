@@ -2,10 +2,26 @@
 
 import Link from "next/link";
 import Button from "../Components/Atoms/Button";
+import { useState } from "react";
 
-const PlanCard = ({ name, price, features, isPro = false, isYearly = false, discount = null, monthlyEquivalent = null, checkoutUrl = null, freeTrial = null }) => {
-  return (
+const PlanCard = ({ name, price, features, isPro = false, isYearly = false, discount = null, monthlyEquivalent = null, priceId = null, freeTrial = null, onCheckout }) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleCheckout = async () => {
+    if (!priceId || !onCheckout) return;
     
+    setLoading(true);
+    try {
+      await onCheckout(priceId);
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Failed to start checkout. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
     <div
       className={`flex flex-col flex-1 p-8 rounded-2xl border ${
         isPro
@@ -64,15 +80,15 @@ const PlanCard = ({ name, price, features, isPro = false, isYearly = false, disc
         ))}
       </ul>
 
-      {checkoutUrl ? (
-        <Link href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="mt-auto">
-          <Button
-            variant={isPro ? "primary" : "secondary"}
-            className="w-full justify-center"
-          >
-            {isPro ? "Get Started" : "Current Plan"}
-          </Button>
-        </Link>
+      {priceId ? (
+        <Button
+          variant={isPro ? "primary" : "secondary"}
+          className="w-full justify-center mt-auto"
+          onClick={handleCheckout}
+          disabled={loading}
+        >
+          {loading ? "Loading..." : (isPro ? "Get Started" : "Current Plan")}
+        </Button>
       ) : (
         <Button
           variant={isPro ? "primary" : "secondary"}
@@ -104,6 +120,38 @@ export default function PlansPage() {
     "Custom interview settings",
     "Advanced whiteboard features",
   ];
+
+  const handleCheckout = async (priceId) => {
+    try {
+      const response = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          priceId: priceId,
+          metadata: {
+            // Add any additional metadata you want
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create checkout session');
+      }
+
+      const { url } = await response.json();
+      
+      // Redirect to Stripe Checkout
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      throw error;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white p-8">
@@ -141,16 +189,18 @@ export default function PlansPage() {
             isYearly={true}
             discount="15"
             monthlyEquivalent="11"
-            checkoutUrl="https://buy.stripe.com/test_7sY7sK9eo4Ay23h5yi8Ra02"
+            priceId={process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID || "price_xxxxx"}
             freeTrial="30 days free trial"
+            onCheckout={handleCheckout}
           />
           <PlanCard
             name="Pro"
             price="$13"
             features={proFeatures}
             isPro={true}
-            checkoutUrl="https://buy.stripe.com/test_5kQ3cueyI2sqfU7bWG8Ra00"
+            priceId={process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID || "price_xxxxx"}
             freeTrial="30 days free trial"
+            onCheckout={handleCheckout}
           />
         </div>
       </div>

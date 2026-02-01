@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { updateUserSubscription } from '@/lib/cognito';
+import { updateUserSubscription, cancelUserSubscription } from '@/lib/cognito';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -26,12 +26,12 @@ export async function POST(request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     
-    // Get customer email from Stripe session
-    const customerEmail = session.customer_email || session.customer_details?.email;
+    // Get username (email) from session metadata or client_reference_id
+    const username = session.metadata?.username || session.client_reference_id;
     
-    if (!customerEmail) {
-      console.error('No customer email found in session');
-      return NextResponse.json({ error: 'No customer email' }, { status: 400 });
+    if (!username) {
+      console.error('No username found in session metadata or client_reference_id');
+      return NextResponse.json({ error: 'No username found' }, { status: 400 });
     }
 
     // Determine plan type from metadata, client_reference_id, or amount
@@ -59,18 +59,43 @@ export async function POST(request) {
         planType = 'pro';
       }
     }
-    
-    // Check client_reference_id for additional context if needed
-    // You could encode plan info in the client_reference_id if needed
 
     try {
-      // Update Cognito user attribute
-      await updateUserSubscription(customerEmail, planType, planPeriod);
+      // Update Cognito user attribute using username (email)
+      await updateUserSubscription(username, planType, planPeriod);
+      
+      // Also store username in customer metadata for future subscription events
+      if (session.customer) {
+        try {
+          await stripe.customers.update(session.customer, {
+            metadata: {
+              username: username,
+            },
+          });
+        } catch (error) {
+          console.warn('Failed to update customer metadata:', error);
+          // Don't fail the webhook if customer update fails
+        }
+      }
+      
+      // Also store username in subscription metadata if subscription exists
+      if (session.subscription) {
+        try {
+          await stripe.subscriptions.update(session.subscription, {
+            metadata: {
+              username: username,
+            },
+          });
+        } catch (error) {
+          console.warn('Failed to update subscription metadata:', error);
+          // Don't fail the webhook if subscription update fails
+        }
+      }
       
       // Note: DynamoDB storage can be done when user logs in next time
       // or via a separate service role. For now, Cognito is the source of truth.
       
-      console.log(`Subscription updated for ${customerEmail}: ${planType} (${planPeriod})`);
+      console.log(`Subscription updated for username ${username}: ${planType} (${planPeriod})`);
       
     } catch (error) {
       console.error('Error updating user subscription:', error);
@@ -81,18 +106,114 @@ export async function POST(request) {
   // Handle subscription updates
   if (event.type === 'customer.subscription.updated') {
     const subscription = event.data.object;
-    // Handle subscription changes (e.g., plan upgrades/downgrades)
-    console.log('Subscription updated:', subscription.id);
+    
+    // Get username from subscription metadata or customer metadata
+    let username = subscription.metadata?.username;
+    
+    // If not in subscription metadata, try to get from customer
+    if (!username && subscription.customer) {
+      try {
+        const customer = await stripe.customers.retrieve(subscription.customer);
+        if (customer && !customer.deleted) {
+          username = customer.metadata?.username;
+        }
+      } catch (error) {
+        console.error('Error retrieving customer:', error);
+      }
+    }
+    
+    if (!username) {
+      console.error('No username found in subscription or customer metadata');
+      return NextResponse.json({ error: 'No username found' }, { status: 400 });
+    }
+
+    // Determine plan type and period from subscription items
+    let planType = 'pro';
+    let planPeriod = 'monthly';
+    
+    // Check subscription metadata first
+    if (subscription.metadata?.plan) {
+      planType = subscription.metadata.plan;
+    }
+    if (subscription.metadata?.period) {
+      planPeriod = subscription.metadata.period;
+    }
+    
+    // If not in metadata, determine from subscription items
+    if (!subscription.metadata?.plan && subscription.items?.data?.length > 0) {
+      const price = subscription.items.data[0].price;
+      const amount = price.unit_amount / 100; // Convert from cents
+      
+      // Determine plan based on amount and interval
+      if (price.recurring?.interval === 'year') {
+        planPeriod = 'yearly';
+        // Yearly plan is typically $132 (11*12)
+        if (amount >= 120 && amount <= 140) {
+          planType = 'pro_yearly';
+        }
+      } else if (price.recurring?.interval === 'month') {
+        planPeriod = 'monthly';
+        // Monthly plan is typically $13
+        if (amount >= 10 && amount <= 15) {
+          planType = 'pro';
+        }
+      }
+    }
+
+    // Check subscription status - if cancelled or past_due, don't update to active
+    const subscriptionStatus = subscription.status;
+    if (subscriptionStatus === 'canceled' || subscriptionStatus === 'unpaid' || subscriptionStatus === 'past_due') {
+      // Subscription is cancelled or in bad state, cancel in Cognito
+      try {
+        await cancelUserSubscription(username);
+        console.log(`Subscription cancelled for username ${username}: ${subscription.id}`);
+      } catch (error) {
+        console.error('Error cancelling user subscription:', error);
+        return NextResponse.json({ error: 'Failed to cancel subscription' }, { status: 500 });
+      }
+    } else {
+      // Active subscription, update normally
+      try {
+        await updateUserSubscription(username, planType, planPeriod);
+        console.log(`Subscription updated for username ${username}: ${planType} (${planPeriod}) - Status: ${subscriptionStatus}`);
+      } catch (error) {
+        console.error('Error updating user subscription:', error);
+        return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 });
+      }
+    }
   }
 
   // Handle subscription cancellations
   if (event.type === 'customer.subscription.deleted') {
     const subscription = event.data.object;
-    // Handle subscription cancellation
-    console.log('Subscription cancelled:', subscription.id);
     
-    // You might want to update the user's subscription status to 'cancelled' or 'free'
-    // This would require looking up the user by Stripe customer ID
+    // Get username from subscription metadata or customer metadata
+    let username = subscription.metadata?.username;
+    
+    // If not in subscription metadata, try to get from customer
+    if (!username && subscription.customer) {
+      try {
+        const customer = await stripe.customers.retrieve(subscription.customer);
+        if (customer && !customer.deleted) {
+          username = customer.metadata?.username;
+        }
+      } catch (error) {
+        console.error('Error retrieving customer:', error);
+      }
+    }
+    
+    if (!username) {
+      console.error('No username found in subscription or customer metadata');
+      return NextResponse.json({ error: 'No username found' }, { status: 400 });
+    }
+
+    try {
+      await cancelUserSubscription(username);
+      console.log(`Subscription cancelled for username ${username}: ${subscription.id}`);
+    } catch (error) {
+      console.error('Error cancelling user subscription:', error);
+      return NextResponse.json({ error: 'Failed to cancel subscription' }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ received: true });

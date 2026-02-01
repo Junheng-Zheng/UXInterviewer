@@ -18,6 +18,10 @@ const CLIENT_SECRET = process.env.COGNITO_CLIENT_SECRET;
 // Create Cognito client
 const cognitoClient = new CognitoIdentityProviderClient({
   region: REGION,
+  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY ? {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  } : undefined,
 });
 
 /**
@@ -261,11 +265,11 @@ export function decodeToken(token) {
 
 /**
  * Update user subscription status in Cognito
- * @param {string} email - User email
+ * @param {string} cognitoSub - User Cognito sub (user ID) or email
  * @param {string} planType - Subscription plan type ('free', 'pro', 'pro_yearly')
  * @param {string} planPeriod - Subscription period ('monthly', 'yearly')
  */
-export async function updateUserSubscription(email, planType, planPeriod) {
+export async function updateUserSubscription(cognitoSub, planType, planPeriod) {
   const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
   
   if (!USER_POOL_ID) {
@@ -274,9 +278,10 @@ export async function updateUserSubscription(email, planType, planPeriod) {
 
   try {
     // Update user attributes
+    // Username can be either the sub (user ID) or email
     const updateCommand = new AdminUpdateUserAttributesCommand({
       UserPoolId: USER_POOL_ID,
-      Username: email,
+      Username: cognitoSub,
       UserAttributes: [
         {
           Name: 'custom:subscription_plan',
@@ -302,6 +307,50 @@ export async function updateUserSubscription(email, planType, planPeriod) {
     return { success: true };
   } catch (error) {
     console.error('Error updating user subscription:', error);
+    throw error;
+  }
+}
+
+/**
+ * Cancel user subscription in Cognito
+ * @param {string} cognitoSub - User Cognito sub (user ID) or email
+ */
+export async function cancelUserSubscription(cognitoSub) {
+  const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+  
+  if (!USER_POOL_ID) {
+    throw new Error('COGNITO_USER_POOL_ID environment variable is not set');
+  }
+
+  try {
+    const updateCommand = new AdminUpdateUserAttributesCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: cognitoSub,
+      UserAttributes: [
+        {
+          Name: 'custom:subscription_plan',
+          Value: 'free',
+        },
+        {
+          Name: 'custom:subscription_period',
+          Value: 'monthly',
+        },
+        {
+          Name: 'custom:subscription_status',
+          Value: 'cancelled',
+        },
+        {
+          Name: 'custom:subscription_updated',
+          Value: new Date().toISOString(),
+        },
+      ],
+    });
+    
+    await cognitoClient.send(updateCommand);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error cancelling user subscription:', error);
     throw error;
   }
 }
