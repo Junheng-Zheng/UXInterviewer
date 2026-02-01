@@ -19,6 +19,7 @@ const ConfirmSignup = () => {
     const emailParam = searchParams.get("email");
     const usernameParam = searchParams.get("username");
     if (emailParam) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEmail(emailParam);
     } else {
       // If no email in URL, redirect to signup
