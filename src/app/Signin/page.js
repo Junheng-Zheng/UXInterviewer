@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getAndClearReturnUrl } from "@/lib/client-auth";
+import { Suspense } from "react";
 
+export default function SigninPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignIn />
+    </Suspense>
+  );
+}
 const SignIn = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -114,5 +122,3 @@ const SignIn = () => {
     </div>
   );
 };
-
-export default SignIn;
