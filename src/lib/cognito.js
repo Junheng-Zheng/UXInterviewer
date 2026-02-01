@@ -344,54 +344,6 @@ export async function getUserSubscriptionFromCognito(email) {
   }
 }
 
-export async function updateUserSubscription(email, planType, planPeriod) {
-  const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
-
-  if (!USER_POOL_ID) {
-    throw new Error('COGNITO_USER_POOL_ID environment variable is not set');
-  }
-
-  try {
-    // get user
-    const getUserCommand = new AdminGetUserCommand({
-      UserPoolId: USER_POOL_ID,
-      Username: email,
-    });
-
-    const user = await cognitoClient.send(getUserCommand);
-
-    // Update user attributes
-    const updateCommand = new AdminUpdateUserAttributesCommand({
-      UserPoolId: USER_POOL_ID,
-      Username: email,
-      UserAttributes: [
-        {
-          Name: 'custom:subscription_plan',
-          Value: planType, // 'free', 'pro', 'pro_yearly'
-        },
-        {
-          Name: 'custom:subscription_period',
-          Value: planPeriod, // 'monthly', 'yearly'
-        },
-        {
-          Name: 'custom:subscription_status',
-          Value: 'active',
-        },
-        {
-          Name: 'custom:subscription_updated',
-          Value: new Date().toISOString(),
-        },
-      ],
-    });
-
-    await cognitoClient.send(updateCommand);
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error updating user subscription:', error);
-    throw error;
-  }
-}
 
 // Export cognitoClient for use in other modules
 export { cognitoClient };
