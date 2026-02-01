@@ -6,7 +6,6 @@ import {
   ResendConfirmationCodeCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
-  AdminUpdateUserAttributesCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { createHmac, randomUUID } from 'crypto';
 
