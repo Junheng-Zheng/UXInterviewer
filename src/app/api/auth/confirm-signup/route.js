@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { confirmSignUp, signIn, decodeToken } from '@/lib/cognito';
 import { setSession } from '@/lib/session';
 
+export const runtime = 'nodejs';
+
 /**
  * Confirm sign up route - verifies email with code and signs in user
  */
