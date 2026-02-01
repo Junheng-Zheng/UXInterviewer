@@ -969,7 +969,7 @@ const Interview = () => {
                     {conversationState === "user_turn" && isListening && (
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs text-gray-600">You're speaking</span>
+                        <span className="text-xs text-gray-600">You&apos;re speaking</span>
                       </div>
                     )}
                     {conversationState === "processing" && (
