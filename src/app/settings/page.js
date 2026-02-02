@@ -15,6 +15,9 @@ const Page= () => {
     email: '',
   });
   const [loading, setLoading] = useState(true);
+  const [subscriptionData, setSubscriptionData] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -37,6 +40,48 @@ const Page= () => {
 
     fetchUserData();
   }, []);
+
+  useEffect(() => {
+    const fetchSubscriptionData = async () => {
+      if (activeTab === 'subscriptions') {
+        setSubscriptionLoading(true);
+        setSubscriptionError(null);
+        try {
+          const response = await fetch('/api/stripe/subscription');
+          if (response.ok) {
+            const data = await response.json();
+            setSubscriptionData(data);
+          } else {
+            const error = await response.json();
+            setSubscriptionError(error.error || 'Failed to fetch subscription data');
+          }
+        } catch (error) {
+          console.error('Error fetching subscription data:', error);
+          setSubscriptionError('Failed to fetch subscription data');
+        } finally {
+          setSubscriptionLoading(false);
+        }
+      }
+    };
+
+    fetchSubscriptionData();
+  }, [activeTab]);
+
+  // Format date helper
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  // Format currency helper
+  const formatCurrency = (amount, currency = 'USD') => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+    }).format(amount);
+  };
+
   return (
     <div className = "flex flex-col text-sm  h-screen gap-0">
               {/* <Link
@@ -93,11 +138,11 @@ const Page= () => {
                 <div className = "flex items-center gap-2 w-full">
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">First Name</p>
-                    <input type="text"  placeholder={userData.firstName || "John"} className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  defaultValue={userData.firstName || ""} placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Last Name</p>
-                    <input type="text"  placeholder={userData.lastName || "Doe"} className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  defaultValue={userData.lastName || ""} placeholder="Doe" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                 </div>
               
@@ -169,17 +214,36 @@ const Page= () => {
              <div className = "flex flex-col gap-8 p-8 px-24">
                  <h3 className = "text-2xl font-serif">Customer & Billing Overview</h3>
 
-                 <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
-  <div className="flex flex-col gap-2">
-    <p className="text-sm text-gray-600">Current Plan</p>
-    <div className="flex items-center gap-2">
-      <p className="text-xl font-serif px-3 py-2 rounded-xl bg-pink-100">Pro Yearly </p>
-    — $11 / month
-
-      </div>
-  </div>
-  <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Manage</button>
-</div>
+                 {subscriptionLoading ? (
+                  <div className="flex justify-center items-center p-6 rounded-xl bg-gray-100">
+                    <p className="text-gray-600">Loading subscription data...</p>
+                  </div>
+                ) : subscriptionError ? (
+                  <div className="flex justify-center items-center p-6 rounded-xl bg-gray-100">
+                    <p className="text-red-600">{subscriptionError}</p>
+                  </div>
+                ) : subscriptionData?.hasSubscription && subscriptionData?.subscription ? (
+                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-gray-600">Current Plan</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xl font-serif px-3 py-2 rounded-xl bg-pink-100">
+                          {subscriptionData.subscription.planName}
+                        </p>
+                        <span>— {formatCurrency(subscriptionData.subscription.amount, subscriptionData.subscription.currency)} / {subscriptionData.subscription.interval}</span>
+                      </div>
+                    </div>
+                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Manage</button>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-gray-600">Current Plan</p>
+                      <p className="text-xl font-serif">No active subscription</p>
+                    </div>
+                    <Link href="/plans" className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Subscribe</Link>
+                  </div>
+                )}
 
 
               <div className = "flex gap-2 items-center">
@@ -187,11 +251,21 @@ const Page= () => {
                 <div className = "flex items-center gap-2 w-full">
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">First Name</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder={subscriptionData?.customer?.name?.split(' ')[0] || userData.firstName || "John"} 
+                      defaultValue={subscriptionData?.customer?.name?.split(' ')[0] || userData.firstName || ""}
+                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Last Name</p>
-                    <input type="text"  placeholder="Doe" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder={subscriptionData?.customer?.name?.split(' ').slice(1).join(' ') || userData.lastName || "Doe"} 
+                      defaultValue={subscriptionData?.customer?.name?.split(' ').slice(1).join(' ') || userData.lastName || ""}
+                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
                 </div>
               </div>
@@ -200,16 +274,31 @@ const Page= () => {
                 <div className = "flex flex-col items-center gap-8 w-full">
                  <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Address Line 1</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder="Enter address" 
+                      defaultValue={subscriptionData?.customer?.address?.line1 || ""}
+                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
                  <div className = "flex gap-2 w-full">
  <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">City</p>
-                    <input type="text"  placeholder="New York" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder="City" 
+                      defaultValue={subscriptionData?.customer?.address?.city || ""}
+                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Country</p>
-                    <input type="text"  placeholder="United States" className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder="Country" 
+                      defaultValue={subscriptionData?.customer?.address?.country || ""}
+                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
 
                   </div>
@@ -217,12 +306,22 @@ const Page= () => {
 
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Zip Code</p>
-                    <input type="text"  placeholder="10001" className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder="Zip Code" 
+                      defaultValue={subscriptionData?.customer?.address?.postal_code || ""}
+                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
 
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">State</p>
-                    <input type="text"  placeholder="New York" className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" />
+                    <input 
+                      type="text"  
+                      placeholder="State" 
+                      defaultValue={subscriptionData?.customer?.address?.state || ""}
+                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
+                    />
                   </div>
                   </div>
 
@@ -235,13 +334,23 @@ const Page= () => {
               <div className = "w-full flex justify-end">
                <button className="px-4 py-3 w-fit bg-gray-100 text-gray-600   rounded-lg flex items-center gap-2 "> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> Save Billing Information</button>  
                </div>
-                 <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
-  <div className="flex flex-col gap-2">
-    <p className="text-sm text-gray-600">Payment Method</p>
-    <p className="text-xl font-serif">Visa ending in 4242 • Expires 08/27</p>
-  </div>
-  <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Update</button>
-</div>
+                 {subscriptionData?.paymentMethod ? (
+                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-gray-600">Payment Method</p>
+                      <p className="text-xl font-serif">{subscriptionData.paymentMethod.displayText}</p>
+                    </div>
+                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Update</button>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-gray-600">Payment Method</p>
+                      <p className="text-xl font-serif text-gray-500">No payment method on file</p>
+                    </div>
+                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Add Payment Method</button>
+                  </div>
+                )}
 
                
 
@@ -267,16 +376,39 @@ const Page= () => {
               </div>
 
               {/* invoices body */}
-              {Array.from({ length: 4 }).map((_, index, array) => (
-
-                <div key={index} className = {`w-full text-gray-600 flex-1 flex items-center px-4 py-3  border-b border-gray-200 ${index === array.length - 1 ? 'border-b-0' : ''}`}>
-                <div className = "w-full justify-center flex-1 flex items-center"> <p>2026-01-01</p></div>
-                <div className = "w-full justify-center flex-1 flex items-center"> <p>Inv-001</p></div>
-                <div className = "w-full justify-center flex-1 flex items-center"> <p>$11</p></div>
-                <div className = "w-full justify-center flex-1 flex items-center"> <p>Paid</p></div>
-                <div className = "w-full justify-center items-center flex-1 flex gap-2 "> <p>View</p> <SquareArrowOutUpRight size={16} strokeWidth={2} className="text-gray-600" /></div>
+              {subscriptionLoading ? (
+                <div className="w-full text-gray-600 flex-1 flex items-center justify-center px-4 py-8">
+                  <p>Loading invoices...</p>
                 </div>
-              ))}
+              ) : subscriptionData?.invoices && subscriptionData.invoices.length > 0 ? (
+                subscriptionData.invoices.map((invoice, index, array) => (
+                  <div key={invoice.id} className = {`w-full text-gray-600 flex-1 flex items-center px-4 py-3  border-b border-gray-200 ${index === array.length - 1 ? 'border-b-0' : ''}`}>
+                    <div className = "w-full justify-center flex-1 flex items-center"> <p>{formatDate(invoice.date)}</p></div>
+                    <div className = "w-full justify-center flex-1 flex items-center"> <p>{invoice.number || invoice.id}</p></div>
+                    <div className = "w-full justify-center flex-1 flex items-center"> <p>{formatCurrency(invoice.amount, invoice.currency)}</p></div>
+                    <div className = "w-full justify-center flex-1 flex items-center"> <p className={`capitalize ${invoice.status === 'paid' ? 'text-green-600' : invoice.status === 'open' ? 'text-yellow-600' : 'text-red-600'}`}>{invoice.status}</p></div>
+                    <div className = "w-full justify-center items-center flex-1 flex gap-2 ">
+                      {invoice.hostedInvoiceUrl || invoice.invoicePdf ? (
+                        <a 
+                          href={invoice.hostedInvoiceUrl || invoice.invoicePdf} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 hover:text-blue-600"
+                        >
+                          <p>View</p> 
+                          <SquareArrowOutUpRight size={16} strokeWidth={2} className="text-gray-600" />
+                        </a>
+                      ) : (
+                        <p>View</p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="w-full text-gray-600 flex-1 flex items-center justify-center px-4 py-8">
+                  <p>No invoices found</p>
+                </div>
+              )}
               </div>
 
             </div>
