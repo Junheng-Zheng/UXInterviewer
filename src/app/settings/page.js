@@ -3,12 +3,40 @@ import Link from 'next/link';
 import { House, User, SquareArrowOutUpRight, ChevronDown, Save, Mail, Lock, MapPin } from 'lucide-react';
 import { CreditCard } from 'lucide-react';
 import { LogOut } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { BookUser } from 'lucide-react';
 const Page= () => {
 
   const [activeTab, setActiveTab] = useState('account');
+  const [userData, setUserData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch('/api/user/profile');
+        if (response.ok) {
+          const data = await response.json();
+          setUserData({
+            firstName: data.givenName || '',
+            lastName: data.familyName || '',
+            email: data.email || '',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
   return (
     <div className = "flex flex-col text-sm  h-screen gap-0">
               {/* <Link
@@ -65,11 +93,11 @@ const Page= () => {
                 <div className = "flex items-center gap-2 w-full">
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">First Name</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  placeholder={userData.firstName || "John"} className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Last Name</p>
-                    <input type="text"  placeholder="Doe" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  placeholder={userData.lastName || "Doe"} className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                 </div>
               
@@ -79,11 +107,11 @@ const Page= () => {
                 <div className = "flex flex-col items-center gap-8 w-full">
                  <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Current Email</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  value={userData.email} readOnly className = "w-full bg-gray-50 rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                    <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">New Email</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text"  placeholder="Enter new email" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                 
                 </div>
