@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../Components/Navbar';
+import { RefreshCw, Sparkles, Keyboard, AudioLines, Tally1, Tally2, Tally3, Zap, Clock     } from 'lucide-react';
 import useStore from '../../store/module';
 
 export default function Home() {
@@ -133,63 +134,95 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen  bg-gray-100">
+    <div className="flex flex-col min-h-screen  text-sm bg-gray-100">
 
-      <div className = "absolute top-0 left-0 w-full flex justify-between h-full">
+      {/* <div className = "absolute top-0 left-0 w-full flex justify-between h-full">
         {Array.from({length: 256}).map((_, index) => (
           <div key={index} className="w-px h-full bg-gray-50 rounded-full" />
         ))}
-      </div>
+      </div> */}
       {/* Navbar */}
       {/* <Navbar activeTab="interview" className="absolute left-1/2 -translate-x-1/2" /> */}
-      
+
       {/* Main Content */}
-      <div className = "flex-1 flex flex-col gap-0 items-center z-1 justify-center p-6">
-       <div className="flex w-full h-full flex-1 flex-col bg-white border border-gray-200 rounded-xl gap-0 items-center z-1 justify-center">
+      <div className = "flex-1 flex flex-col gap-0 items-center  justify-center p-8">
+
+       <div className="flex w-full h-full flex-1 flex-col bg-white relative rounded-xl gap-0 items-center z-1 justify-center">
+        
+                    <div
+        className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none"
+        style={{ backgroundSize: '16px 16px' }}>
+      </div>
+        <div className = "flex border-b z-20 border-gray-200 justify-between w-full items-center p-6">
+        <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full"/>
+          <Navbar />
+          <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full" />
+        </div>
         <div className = "border-l border-r border-gray-200 w-3xl flex-1" />
-        <div className = "h-px w-full bg-gray-200" />
-        <div className="bg-white border-l border-r border-gray-200  p-8 flex flex-col gap-5 max-w-3xl relative w-full">
+                <div className = "h-px w-full bg-gray-200" />
+        <div className=" border-l border-r border-gray-200  z-20 p-8 flex flex-col gap-5 max-w-3xl relative w-full">
         {/* Top Controls */}
-        <div className="flex gap-5 items-end">
-          <button
-            onClick={reloadChallenge}
-            className="bg-gray-100 px-4 py-2 rounded-xl cursor-pointer text-black font-light hover:bg-[#e5e5e5] transition-colors"
-          >
-            Reload Challenge
-          </button>
           
-          <div className="flex gap-5 items-end justify-center">
-            <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" />
+        <div className="flex gap-5 items-end">
+       
+          
+          <div className="flex gap-3 items-center justify-center">
+             <button
+            onClick={reloadChallenge}
+            className="bg-blue-100 px-4 py-4  w-fit flex items-center justify-center gap-2 rounded-xl cursor-pointer text-black font-normal hover:bg-[#e5e5e5] transition-colors"
+          >
+
+            <RefreshCw size={16} />
+            New
+
+            
+          </button>
+
+            {/* <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" /> */}
             
             {/* Time Selector */}
-            <div className="flex flex-col gap-2">
-              <p className="text-lg text-black font-serif">Time</p>
+            {/* <div className="flex flex-col gap-2">
+              <p className="text-xl text-black font-serif">Time</p>
               <div className="flex gap-2.5 items-center">
                 <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center justify-center">
                   <input
                     type="number"
                     value={time || 30}
                     onChange={(e) => setTime(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="bg-transparent text-black font-light w-12 text-center outline-none"
+                    className="bg-transparent text-black font-normal w-12 text-center outline-none"
                     min="1"
                     max="120"
                   />
                 </div>
-                <p className="text-black font-light text-base">Min</p>
+                <p className="text-black font-normal text-base">Min</p>
               </div>
+            </div> */}
+            <div className="items-center relative flex flex-nowrap w-fit h-fit rounded-xl  bg-gray-100">
+
+            <div className = "flex flex-nowrap w-fit p-2 px-4  font-serif text-lg items-center gap-2">
+          Time
+           </div>
+            <div className = "w-px  self-stretch bg-gray-200" />
+
+                <div className = "flex gap-2 flex-nowrap p-2 items-center rounded-xl">
+                  <button className="px-3 py-2 bg-white h-fit text-black cursor-pointer pointer-events-auto flex-nowrap rounded-xl flex items-center gap-2">
+                    <Clock size={16} strokeWidth={1.2} />
+                    {time} Min
+                  </button>
+                </div>
             </div>
 
-            <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" />
+            {/* <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" /> */}
 
             {/* Difficulty Selector */}
-            <div className="flex flex-col gap-2 justify-end">
-              <p className="text-lg text-black font-serif">Difficulty</p>
+            {/* <div className="flex flex-col gap-2 justify-end">
+              <p className="text-xl text-black font-serif">Difficulty</p>
               <div className="flex gap-2.5 items-start">
                 {['Easy', 'Medium', 'Hard'].map((level) => (
                   <button
                     key={level}
                     onClick={() => setDifficulty(level)}
-                    className={`px-4 py-2 rounded-xl cursor-pointer font-light transition-colors ${
+                    className={`px-4 py-2 rounded-xl cursor-pointer font-normal transition-colors ${
                       difficulty === level
                         ? 'bg-[#262626] text-white'
                         : 'bg-gray-100 text-black hover:bg-[#e5e5e5]'
@@ -199,7 +232,35 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-            </div>
+            </div> */}
+              <div className="items-center relative flex  w-fit h-fit rounded-xl  bg-gray-100">
+
+           <div className = "flex w-fit p-2 px-4  font-serif text-lg bg items-center gap-2">
+          Difficulty
+           </div>
+            <div className = "w-px  self-stretch bg-gray-200" />
+
+                <div className = "flex gap-2  p-2 items-center rounded-xl">
+                   {['Easy', 'Medium', 'Hard'].map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setDifficulty(level)}
+                    className={`px-3 py-2 rounded-xl flex items-center gap-2 cursor-pointer font-normal transition-colors ${
+                      difficulty === level
+                        ? 'bg-[#262626] text-white'
+                        : 'bg-gray-100 text-black bg-white hover:bg-[#e5e5e5]'
+                    }`}
+                  >
+                    {difficulty === level ? <Zap  size={16} strokeWidth={1.2} stroke="#fcd34d" fill="#fcd34d" /> : <Zap  size={16} strokeWidth={1.2} />} 
+                    {level}
+                  </button>
+                ))}
+                  
+                </div>
+       
+      
+        </div>
+
 
            
           </div>
@@ -208,36 +269,32 @@ export default function Home() {
         <div className="bg-[#e4e4e4] h-px w-full rounded-full" />
 
         {/* Challenge Display */}
-        <div className="flex flex-col gap-2.5 items-start w-full">
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-xl w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-xl bg-red-100">DESIGN</span>{' '}
-              <span className="font-light">{design || 'a landing page'}</span>
-            </p>
+        <div className="flex flex-col gap-2.5  text-base items-start w-full">
+          <div className="bg-gray-100 pl-3 pr-5  flex gap-2 items-center py-2 h-fit rounded-xl w-fit">
+          
+              <div className="font-serif text-lg px-3 py-2 rounded-xl  bg-red-100">DESIGN</div>{' '}
+              <p className="font-normal">{design || 'a landing page'}</p>
           </div>
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-xl w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-xl bg-blue-100">FOR</span>{' '}
-              <span className="font-light">{target || 'a hospital recipient page'}</span>
-            </p>
+          <div className="bg-gray-100 pl-3 pr-5  flex gap-2 items-center py-3 h-fit  rounded-xl w-fit">
+          
+              <div className="font-serif text-lg px-3 py-2 rounded-xl bg-blue-100">FOR</div>{' '}
+              <p className="font-normal">{target || 'a hospital recipient page'}</p>
           </div>
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-xl w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-xl bg-pink-100">TO HELP</span>{' '}
-              <span className="font-light">{tohelp || 'neurodivergent people'}</span>
-            </p>
+          <div className="bg-gray-100 pl-3 pr-5  flex gap-2 items-center py-3 h-fit  rounded-xl w-fit">
+            <div className="font-serif text-lg px-3 py-2 rounded-xl bg-pink-100">TO HELP</div>{' '}
+            <p className="font-normal">{tohelp || 'neurodivergent people'}</p>
           </div>
         </div>
 
         <div className="bg-[#e4e4e4] h-px w-full rounded-full" />
 
         {/* Audio Settings */}
-        <div className="flex gap-5 items-start">
+        {/* <div className="flex gap-5 items-start">
           <div className="flex flex-col gap-2">
             <p className="text-lg text-black font-serif">Input</p>
             <div className="flex gap-2 items-start">
               <div className="bg-gray-100 px-4 py-2 rounded-xl w-40 relative">
-                <p className="text-black font-light text-base truncate">
+                <p className="text-black font-normal text-base truncate">
                   {inputDevice || 'Desktop Microphone'}
                 </p>
                 <select
@@ -254,7 +311,7 @@ export default function Home() {
               </div>
               <button
                 onClick={testMicrophone}
-                className="bg-white border border-gray-200 px-4 py-2 rounded-xl cursor-pointer text-black font-light hover:bg-[#f9f9f9] transition-colors"
+                className="bg-white border border-gray-200 px-4 py-2 rounded-xl cursor-pointer text-black font-normal hover:bg-[#f9f9f9] transition-colors"
               >
                 Test Microphone
               </button>
@@ -266,7 +323,7 @@ export default function Home() {
           <div className="flex flex-col gap-2">
             <p className="text-lg text-black font-serif">Output</p>
             <div className="bg-gray-100 px-4 py-2 rounded-xl w-40 relative">
-              <p className="text-black font-light text-base truncate">
+              <p className="text-black font-normal text-base truncate">
                 {outputDevice || 'Desktop Speakers'}
               </p>
               <select
@@ -282,14 +339,16 @@ export default function Home() {
               </select>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Start Button */}
         <button
           onClick={startInterview}
-          className="bg-[#386ef8] px-4 py-3 cursor-pointer rounded-xl text-white text-lg font-serif w-full hover:bg-[#2557d4] transition-colors"
+          className="bg-[#262626] px-4 py-3 flex items-center justify-center gap-2 cursor-pointer rounded-xl  text-base  w-full hover:bg-black  text-white transition-colors"
         >
-          START INTERVIEW
+          <Sparkles size={20} strokeWidth={1.2} />
+
+          Start Interview
         </button>
         </div>
         <div className = "h-px w-full bg-gray-200" />

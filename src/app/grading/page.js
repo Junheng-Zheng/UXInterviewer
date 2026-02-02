@@ -151,6 +151,7 @@ export default function GradingPage() {
       </div>
 
      <div className=" bg-white rounded-xl z-50 w-full h-fit flex items-center">
+      
      {/* Left Side - Decorative Border with Score */}
       <div className="flex flex-col h-[704px] items-start shrink-0 relative">
         {/* Top Vertical Lines */}
