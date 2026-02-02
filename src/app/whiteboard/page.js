@@ -58,11 +58,6 @@ export default function WhiteboardPage() {
     return `whiteboard_${design}_${target}_${tohelp}`.replace(/\s+/g, '_');
   }, [design, target, tohelp]);
   
-  // Generate localStorage key for session state (timer, conversation, etc.)
-  const getSessionStorageKey = useCallback(() => {
-    return `session_${design}_${target}_${tohelp}`.replace(/\s+/g, '_');
-  }, [design, target, tohelp]);
-  
   // Speech recognition state
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
@@ -131,16 +126,7 @@ export default function WhiteboardPage() {
   const [isLocalStorageLoaded, setIsLocalStorageLoaded] = useState(false);
   
   // Stable initialData reference for ExcalidrawWrapper - will be set once from localStorage
-  // Initialize with default empty data
-  const excalidrawInitialDataRef = useRef({
-    elements: [],
-    appState: {
-      viewBackgroundColor: "#ffffff",
-      zenModeEnabled: true,
-      currentItemFontFamily: 2,
-    },
-    files: {},
-  });
+  const excalidrawInitialDataRef = useRef(null);
   
   const [interviewerMessage, setInterviewerMessage] = useState({
     visible: "",
@@ -556,13 +542,11 @@ export default function WhiteboardPage() {
     stopRecognition();
     stopMicrophone();
     
-    // Clear localStorage for this session (both whiteboard and session state)
+    // Clear localStorage for this session
     if (design && target && tohelp) {
       const storageKey = getLocalStorageKey();
-      const sessionKey = getSessionStorageKey();
       localStorage.removeItem(storageKey);
-      localStorage.removeItem(sessionKey);
-      console.log('Discarded whiteboard and session data');
+      console.log('Discarded whiteboard data');
     }
     
     // Navigate to home
@@ -581,13 +565,11 @@ export default function WhiteboardPage() {
     stopRecognition();
     stopMicrophone();
     
-    // Clear localStorage for this session (both whiteboard and session state)
+    // Clear localStorage for this session
     if (design && target && tohelp) {
       const storageKey = getLocalStorageKey();
-      const sessionKey = getSessionStorageKey();
       localStorage.removeItem(storageKey);
-      localStorage.removeItem(sessionKey);
-      console.log('Cleared whiteboard and session data for restart');
+      console.log('Cleared whiteboard data for restart');
     }
     
     // Reset whiteboard
@@ -1015,15 +997,6 @@ export default function WhiteboardPage() {
       setScreenshot(screenshotBase64);
       console.log("Screenshot stored:", screenshotBase64 ? `${screenshotBase64.substring(0, 50)}...` : "null");
       console.log("Evaluation complete - grading page will automatically update");
-      
-      // Clear localStorage for this session after successful submission
-      if (design && target && tohelp) {
-        const storageKey = getLocalStorageKey();
-        const sessionKey = getSessionStorageKey();
-        localStorage.removeItem(storageKey);
-        localStorage.removeItem(sessionKey);
-        console.log('Cleared interview data from localStorage after successful submission');
-      }
     } catch (error) {
       console.error("Error grading submission:", error);
       alert(error.message || "Failed to grade submission. Please try again.");
@@ -1160,24 +1133,8 @@ const loadTestJSON = async () => {
 
   // Load whiteboard data from localStorage on mount - BEFORE rendering ExcalidrawWrapper
   useEffect(() => {
-    console.log('📂 Load whiteboard effect running:', {
-      isLocalStorageLoaded,
-      hasDesign: !!design,
-      hasTarget: !!target,
-      hasTohelp: !!tohelp
-    });
-    
     // Only run once when we have design params
-    if (isLocalStorageLoaded) {
-      console.log('⏭️ Already loaded, skipping');
-      return;
-    }
-    
-    // Wait until we have the interview params before loading
-    if (!design || !target || !tohelp) {
-      console.log('⏳ Waiting for interview params before loading whiteboard data');
-      return;
-    }
+    if (isLocalStorageLoaded) return;
     
     // Default data structure
     const defaultData = {
@@ -1190,49 +1147,53 @@ const loadTestJSON = async () => {
       files: {},
     };
     
-    // Now we have params, try to load from localStorage
-    const storageKey = getLocalStorageKey();
-    console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        
-        // Log what we're loading
-        const numElements = parsedData.elements?.length || 0;
-        const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
-        console.log('✅ Loaded whiteboard data from localStorage:', {
-          key: storageKey,
-          elementsCount: numElements,
-          filesCount: numFiles,
-          dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
-        });
-        
-        // Sanitize appState to remove/fix problematic properties
-        if (parsedData.appState) {
-          delete parsedData.appState.collaborators;
-          delete parsedData.appState.openMenu;
-          delete parsedData.appState.isLoading;
+    if (design && target && tohelp) {
+      const storageKey = getLocalStorageKey();
+      console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
+      const savedData = localStorage.getItem(storageKey);
+      
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          
+          // Log what we're loading
+          const numElements = parsedData.elements?.length || 0;
+          const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
+          console.log('✅ Loaded whiteboard data from localStorage:', {
+            key: storageKey,
+            elementsCount: numElements,
+            filesCount: numFiles,
+            dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
+          });
+          
+          // Sanitize appState to remove/fix problematic properties
+          if (parsedData.appState) {
+            delete parsedData.appState.collaborators;
+            delete parsedData.appState.openMenu;
+            delete parsedData.appState.isLoading;
+          }
+          
+          // Set the initialData ref with loaded data
+          excalidrawInitialDataRef.current = {
+            elements: parsedData.elements || [],
+            appState: {
+              ...defaultData.appState,
+              ...(parsedData.appState || {}),
+            },
+            files: parsedData.files || {},
+          };
+          
+          console.log('📦 Set initialData from localStorage');
+        } catch (error) {
+          console.error('❌ Error loading whiteboard data from localStorage:', error);
+          excalidrawInitialDataRef.current = defaultData;
         }
-        
-        // Set the initialData ref with loaded data
-        excalidrawInitialDataRef.current = {
-          elements: parsedData.elements || [],
-          appState: {
-            ...defaultData.appState,
-            ...(parsedData.appState || {}),
-          },
-          files: parsedData.files || {},
-        };
-        
-        console.log('📦 Set initialData from localStorage with', numElements, 'elements');
-      } catch (error) {
-        console.error('❌ Error loading whiteboard data from localStorage:', error);
+      } else {
+        console.log('ℹ️ No saved whiteboard data found, using default');
         excalidrawInitialDataRef.current = defaultData;
       }
     } else {
-      console.log('ℹ️ No saved whiteboard data found, using default empty canvas');
+      console.log('⚠️ Cannot load whiteboard - missing params, using default');
       excalidrawInitialDataRef.current = defaultData;
     }
     
@@ -1240,91 +1201,12 @@ const loadTestJSON = async () => {
     setIsLocalStorageLoaded(true);
   }, [design, target, tohelp, getLocalStorageKey, isLocalStorageLoaded]);
 
-  // Track if session state has been loaded
-  const [isSessionLoaded, setIsSessionLoaded] = useState(false);
-
-  // Load session state (timer, conversation, etc.) from localStorage on mount
-  useEffect(() => {
-    // Only run once when we have design params
-    if (isSessionLoaded) return;
-    
-    // Wait until we have the interview params before loading
-    if (!design || !target || !tohelp) {
-      console.log('⏳ Waiting for interview params before loading session state');
-      return;
-    }
-    
-    // Now we have params, try to load session state
-    const sessionKey = getSessionStorageKey();
-    console.log('🔍 Attempting to load session state with key:', sessionKey);
-    const savedSession = localStorage.getItem(sessionKey);
-    
-    if (savedSession) {
-      try {
-        const parsedSession = JSON.parse(savedSession);
-        
-        console.log('✅ Loaded session state from localStorage:', {
-          key: sessionKey,
-          timeRemaining: parsedSession.timeRemaining,
-          conversationCount: parsedSession.conversationHistory?.length || 0,
-          hasInitialGreeting: parsedSession.hasInitialGreeting,
-          lastSaved: parsedSession.lastSaved ? new Date(parsedSession.lastSaved).toISOString() : 'unknown',
-        });
-        
-        // Restore timer (only if there's meaningful time remaining)
-        if (parsedSession.timeRemaining !== undefined && parsedSession.timeRemaining > 0) {
-          setTimeRemaining(parsedSession.timeRemaining);
-          timeRemainingRef.current = parsedSession.timeRemaining;
-          console.log('⏱️ Restored timer to:', parsedSession.timeRemaining, 'seconds');
-        }
-        
-        // Restore conversation history
-        if (parsedSession.conversationHistory && Array.isArray(parsedSession.conversationHistory)) {
-          // Convert timestamp strings back to Date objects
-          const restoredHistory = parsedSession.conversationHistory.map(msg => ({
-            ...msg,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          }));
-          setConversationHistory(restoredHistory);
-          console.log('💬 Restored conversation history:', restoredHistory.length, 'messages');
-        }
-        
-        // Restore current user message
-        if (parsedSession.currentUserMessage) {
-          setCurrentUserMessage(parsedSession.currentUserMessage);
-          currentUserMessageRef.current = parsedSession.currentUserMessage;
-        }
-        
-        // Restore input mode
-        if (parsedSession.inputMode) {
-          setInputMode(parsedSession.inputMode);
-          inputModeRef.current = parsedSession.inputMode;
-          console.log('🎤 Restored input mode:', parsedSession.inputMode);
-        }
-        
-        // Restore initial greeting flag
-        if (parsedSession.hasInitialGreeting) {
-          hasInitialGreetingRef.current = true;
-          console.log('👋 Initial greeting already sent, skipping');
-        }
-        
-      } catch (error) {
-        console.error('❌ Error loading session state from localStorage:', error);
-      }
-    } else {
-      console.log('ℹ️ No saved session state found, starting fresh interview');
-    }
-    
-    // Mark session as loaded
-    setIsSessionLoaded(true);
-  }, [design, target, tohelp, getSessionStorageKey, isSessionLoaded]);
-
   // Track last save time to debounce saves
   const saveTimeoutRef = useRef(null);
 
   // Function to save whiteboard data to localStorage
   const saveToLocalStorage = useCallback((elements, appState, files) => {
-    console.log('📝 saveToLocalStorage called with:', {
+    console.log('saveToLocalStorage called with:', {
       elementsCount: elements?.length || 0,
       filesCount: files ? Object.keys(files).length : 0,
       hasDesign: !!design,
@@ -1333,7 +1215,7 @@ const loadTestJSON = async () => {
     });
 
     if (!design || !target || !tohelp) {
-      console.warn('⚠️ Skipping save - missing interview params:', { design, target, tohelp });
+      console.warn('Skipping save - missing interview params:', { design, target, tohelp });
       return;
     }
 
@@ -1389,116 +1271,48 @@ const loadTestJSON = async () => {
     }, 1000);
   }, [design, target, tohelp, getLocalStorageKey]);
 
-  // Track last session save time to debounce saves
-  const sessionSaveTimeoutRef = useRef(null);
-
-  // Function to save session state (timer, conversation, etc.) to localStorage
-  const saveSessionToLocalStorage = useCallback(() => {
-    if (!design || !target || !tohelp) {
-      return;
-    }
-
-    // Clear previous timeout
-    if (sessionSaveTimeoutRef.current) {
-      clearTimeout(sessionSaveTimeoutRef.current);
-    }
-
-    // Debounce: save 500ms after last change
-    sessionSaveTimeoutRef.current = setTimeout(() => {
-      const sessionKey = getSessionStorageKey();
-      
-      const sessionData = {
-        timeRemaining: timeRemainingRef.current,
-        conversationHistory: conversationHistory,
-        currentUserMessage: currentUserMessageRef.current,
-        inputMode: inputModeRef.current,
-        hasInitialGreeting: hasInitialGreetingRef.current,
-        lastSaved: Date.now(),
-      };
-      
-      try {
-        const jsonString = JSON.stringify(sessionData);
-        localStorage.setItem(sessionKey, jsonString);
-        console.log('✅ Saved session state to localStorage:', {
-          key: sessionKey,
-          timeRemaining: sessionData.timeRemaining,
-          conversationCount: sessionData.conversationHistory.length,
-          hasInitialGreeting: sessionData.hasInitialGreeting,
-        });
-      } catch (error) {
-        console.error('❌ Error saving session state to localStorage:', error);
-      }
-    }, 500);
-  }, [design, target, tohelp, getSessionStorageKey, conversationHistory]);
-
-  // Save session state whenever relevant state changes
-  useEffect(() => {
-    saveSessionToLocalStorage();
-  }, [timeRemaining, conversationHistory, inputMode, saveSessionToLocalStorage]);
-
   // Save immediately before page unload
   useEffect(() => {
     const handleBeforeUnload = () => {
       // Force immediate save (bypass debounce) when page is closing
-      if (design && target && tohelp) {
-        // Save whiteboard data
-        if (excalidrawDataRef.current) {
-          const { elements, appState, files } = excalidrawDataRef.current;
-          const storageKey = getLocalStorageKey();
-          
-          const cleanAppState = appState ? { ...appState } : {};
-          delete cleanAppState.collaborators;
-          delete cleanAppState.openMenu;
-          delete cleanAppState.isLoading;
-          
-          const serializableFiles = files ? Object.fromEntries(
-            Object.entries(files).map(([key, file]) => [key, {
-              mimeType: file.mimeType,
-              id: file.id,
-              dataURL: file.dataURL,
-              created: file.created,
-              lastRetrieved: file.lastRetrieved,
-            }])
-          ) : {};
-          
-          const dataToSave = {
-            elements,
-            appState: cleanAppState,
-            files: serializableFiles,
-            scrollToContent: false,
-          };
-          
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-            console.log('💾 Force saved whiteboard on page unload');
-          } catch (error) {
-            console.error('Error force saving whiteboard on unload:', error);
-          }
-        }
+      if (excalidrawDataRef.current && design && target && tohelp) {
+        const { elements, appState, files } = excalidrawDataRef.current;
+        const storageKey = getLocalStorageKey();
         
-        // Save session state (timer, conversation, etc.)
-        const sessionKey = getSessionStorageKey();
-        const sessionData = {
-          timeRemaining: timeRemainingRef.current,
-          conversationHistory: conversationHistory,
-          currentUserMessage: currentUserMessageRef.current,
-          inputMode: inputModeRef.current,
-          hasInitialGreeting: hasInitialGreetingRef.current,
-          lastSaved: Date.now(),
+        const cleanAppState = appState ? { ...appState } : {};
+        delete cleanAppState.collaborators;
+        delete cleanAppState.openMenu;
+        delete cleanAppState.isLoading;
+        
+        const serializableFiles = files ? Object.fromEntries(
+          Object.entries(files).map(([key, file]) => [key, {
+            mimeType: file.mimeType,
+            id: file.id,
+            dataURL: file.dataURL,
+            created: file.created,
+            lastRetrieved: file.lastRetrieved,
+          }])
+        ) : {};
+        
+        const dataToSave = {
+          elements,
+          appState: cleanAppState,
+          files: serializableFiles,
+          scrollToContent: false,
         };
         
         try {
-          localStorage.setItem(sessionKey, JSON.stringify(sessionData));
-          console.log('💾 Force saved session state on page unload');
+          localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+          console.log('💾 Force saved on page unload');
         } catch (error) {
-          console.error('Error force saving session state on unload:', error);
+          console.error('Error force saving on unload:', error);
         }
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [design, target, tohelp, getLocalStorageKey, getSessionStorageKey, conversationHistory]);
+  }, [design, target, tohelp, getLocalStorageKey]);
 
   // Auto-scroll conversation box to bottom when messages change
   useEffect(() => {
@@ -1507,11 +1321,8 @@ const loadTestJSON = async () => {
     }
   }, [conversationHistory, currentUserMessage, interimTranscript, isProcessingAI]);
 
-  // Generate initial AI greeting when interview starts (only if session is loaded and no previous greeting)
+  // Generate initial AI greeting when interview starts
   useEffect(() => {
-    // Wait for session to be loaded before deciding on initial greeting
-    if (!isSessionLoaded) return;
-    
     if (design && target && tohelp && !hasInitialGreetingRef.current) {
       hasInitialGreetingRef.current = true;
       // Small delay to let everything initialize
@@ -1521,7 +1332,7 @@ const loadTestJSON = async () => {
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design, target, tohelp, isSessionLoaded]);
+  }, [design, target, tohelp]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -1811,14 +1622,10 @@ const loadTestJSON = async () => {
              onReady={(api) => {
                excalidrawAPIRef.current = api;
              }}
-            onChange={(elements, appState, files) => {
-              console.log('🔄 ExcalidrawWrapper onChange fired:', {
-                elementsCount: elements?.length || 0,
-                filesCount: files ? Object.keys(files).length : 0,
-              });
-              excalidrawDataRef.current = { elements, appState, files };
-              saveToLocalStorage(elements, appState, files);
-            }}
+             onChange={(elements, appState, files) => {
+               excalidrawDataRef.current = { elements, appState, files };
+               saveToLocalStorage(elements, appState, files);
+             }}
            />
          ) : (
            <div className="w-full h-full flex items-center justify-center bg-white">

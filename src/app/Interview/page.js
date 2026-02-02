@@ -5,7 +5,7 @@ import "@excalidraw/excalidraw/index.css";
 import { useState, useEffect, useRef } from "react";
 import useStore from "../../store/module";
 import Animatedlink from "../Components/Atoms/Animatedlink";
-import Profile from "../Components/Molecules/Profile";
+import Profile from "../Components/Profile";
 import Results from "../Components/Templates/Results";
 
 const Excalidraw = dynamic(

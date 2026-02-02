@@ -6,7 +6,7 @@ import Script from "next/script";
 import Animatedlink from "./Components/Atoms/Animatedlink";
 import Challengecycle from "./Components/Organisms/Challangecycle";
 import Interview from "./Components/Templates/Interview";
-import Profile from "./Components/Molecules/Profile";
+import Profile from "./Components/Profile";
 import Profilenavbar from "./Components/Organisms/Profilenavbar";
 import { useState, useEffect } from "react";
 import Results from "./Components/Templates/Results";

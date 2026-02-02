@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Button from "../Components/Atoms/Button";
 import { useState } from "react";
-
+import { Award, Check, House, Tag } from "lucide-react";
 const PlanCard = ({ name, price, features, isPro = false, isYearly = false, discount = null, monthlyEquivalent = null, priceId = null, freeTrial = null, onCheckout }) => {
   const [loading, setLoading] = useState(false);
 
@@ -23,79 +23,83 @@ const PlanCard = ({ name, price, features, isPro = false, isYearly = false, disc
 
   return (
     <div
-      className={`flex flex-col flex-1 p-8 rounded-2xl border ${
-        isPro
-          ? "border-orange-500 bg-gradient-to-br from-orange-50 to-white shadow-lg shadow-orange-200"
-          : "border-gray-200 bg-white shadow-md shadow-gray-200"
-      }`}
+      className={`flex flex-col flex-1 p-8 rounded-2xl border z-50 border-gray-200 bg-white gap-12`}
     >
-      <div className="flex flex-col gap-4 mb-6">
+
+    
+      
+
+
+      <div className="flex flex-col gap-4 ">
         <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-semibold text-black">{name}</h3>
-          <div className="flex items-center gap-2">
-            {discount && (
-              <span className="px-3 py-1 text-xs font-semibold bg-green-500 text-white rounded-full">
-                {discount}% OFF
-              </span>
+          <h3 className=" px-4 py-2  bg-gray-100 text-sm rounded-xl text-black">{name}</h3>
+                      {isPro && isYearly && (
+              <div className="px-3 py-2 rounded-xl text-sm  bg-blue-100 text-black flex items-center gap-2">
+                <Award size={16} strokeWidth={1.3} />
+                Popular
+              </div>
             )}
-            {isPro && isYearly && (
-              <span className="px-3 py-1 text-xs font-semibold bg-orange-500 text-white rounded-full">
-                POPULAR
-              </span>
+        </div>
+   <div className="flex gap-1 items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-5xl font-serif text-black">{price}</span>
+            {price !== "Free" && (
+              <span >{isYearly ? "/month" : "/month"}</span>
             )}
           </div>
+          {monthlyEquivalent && (
+            <p className="text-xs text-gray-500">
+              ($132 billed annually)
+            </p>
+          )}
         </div>
-        {freeTrial && (
-          <div className="mb-2">
-            <span className="px-3 py-1 text-xs font-semibold bg-blue-500 text-white rounded-full">
+          <div className="flex items-center gap-2">
+            {!isPro && (
+              <span className="px-3 py-2 rounded-xl text-sm  bg-blue-100  text-black ">
+                Free Forever
+              </span>
+            )}
+            {discount && (
+              <span className="px-3 py-2 rounded-xl text-sm  bg-pink-100 text-black flex items-center gap-2">
+                <Tag size={16} strokeWidth={1.3} /> {discount}% off 
+              </span>
+            )}
+                    {freeTrial && (
+          <div className="">
+            <span className="px-3 py-2 rounded-xl text-sm  bg-red-100 text-black ">
               {freeTrial}
             </span>
           </div>
         )}
-        <div className="flex flex-col gap-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-black">{price}</span>
-            {price !== "Free" && (
-              <span className="text-sm text-gray-500">{isYearly ? "/month" : "/month"}</span>
-            )}
+
           </div>
-          {monthlyEquivalent && (
-            <p className="text-sm text-gray-500">
-              $132 billed annually
-            </p>
-          )}
-        </div>
+
+     
       </div>
 
-      <ul className="flex flex-col gap-3 mb-8 flex-grow">
+      <div className="flex flex-col gap-3 flex-grow">
         {features.map((feature, index) => (
-          <li key={index} className="flex items-start gap-3">
-            <i
-              className={`fa-solid ${
-                isPro ? "fa-check text-orange-500" : "fa-check text-gray-400"
-              } mt-1`}
-            />
+          <div key={index} className="flex items-start gap-3">
+            <Check size={16} strokeWidth={1.3} />
             <span className="text-sm text-gray-700">{feature}</span>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
 
       {priceId ? (
-        <Button
-          variant={isPro ? "primary" : "secondary"}
-          className="w-full justify-center mt-auto"
+        <button 
+        className={`w-full justify-center cursor-pointer flex items-center gap-2 text-xl font-serif px-4 py-3 rounded-xl ${isPro && isYearly ? "bg-black text-white" : "bg-gray-100"}`}
           onClick={handleCheckout}
           disabled={loading}
         >
           {loading ? "Loading..." : (isPro ? "Get Started" : "Current Plan")}
-        </Button>
+        </button>
       ) : (
-        <Button
-          variant={isPro ? "primary" : "secondary"}
-          className="w-full justify-center mt-auto"
+        <button
+          className="w-full justify-center cursor-pointer flex items-center gap-2 text-xl font-serif px-4 py-3 rounded-xl bg-gray-100 "
         >
           {isPro ? "Get Started" : "Current Plan"}
-        </Button>
+        </button>
       )}
     </div>
   );
@@ -103,7 +107,7 @@ const PlanCard = ({ name, price, features, isPro = false, isYearly = false, disc
 
 export default function PlansPage() {
   const freeFeatures = [
-    "5 interviews per month",
+    "3 interviews per day",
     "Basic feedback and grading",
     "Access to standard challenges",
     "Interview history tracking",
@@ -111,14 +115,11 @@ export default function PlansPage() {
   ];
 
   const proFeatures = [
+    "Everything in Free",
     "Unlimited interviews",
     "Advanced AI feedback and grading",
-    "Access to all premium challenges",
     "Detailed interview analytics",
     "Priority support",
-    "Export interview results",
-    "Custom interview settings",
-    "Advanced whiteboard features",
   ];
 
   const handleCheckout = async (priceId) => {
@@ -154,27 +155,28 @@ export default function PlansPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white p-8">
-      <div className="max-w-7xl mx-auto">
+
+    <div className="h-dvh z-200 b bg-[#F9F9F9] flex flex-col gap-0">
+     <div className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none" style={{ backgroundSize: '16px 16px' }}/>
         {/* Back Button */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors duration-200"
+          className="inline-flex px-12 border-b border-gray-200 w-full py-6 items-center gap-2 text-gray-600 hover:text-gray-900  transition-colors duration-200"
         >
-          <i className="fa-solid fa-arrow-left" />
-          <span className="text-sm font-medium">Back to Dashboard</span>
+          <House size={20} strokeWidth={1.3} /> Back
         </Link>
 
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-black mb-4">Choose Your Plan</h1>
-          <p className="text-lg text-gray-600">
-            Select the plan that best fits your interview practice needs
+<div className = "flex flex-col gap-8 px-12   justify-center w-full  min-h-0 h-full ">
+          <div className="flex flex-col w-fit gap-2">
+          <h1 className="text-[32px] font-serif   text-black ">Pricing</h1>
+          <p className="w-2/3  text-gray-600">
+           Select the plan that best fits your interview practice needs
           </p>
         </div>
 
         {/* Plans */}
-        <div className="flex flex-row gap-8 items-stretch">
+        <div className="flex flex-row gap-4 ">
           <PlanCard
             name="Free"
             price="Free"
@@ -203,7 +205,9 @@ export default function PlansPage() {
             onCheckout={handleCheckout}
           />
         </div>
+</div>
       </div>
-    </div>
   );
 }
+
+

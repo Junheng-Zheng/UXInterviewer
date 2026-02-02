@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../Components/Navbar';
 import { RefreshCw, Sparkles, Keyboard, AudioLines, Tally1, Tally2, Tally3, Zap, Clock     } from 'lucide-react';
-import Profile from '../Components/Molecules/Profile';
+import Profile from '../Components/Profile';
 import useStore from '../../store/module';
 
 export default function Home() {
@@ -144,9 +144,6 @@ export default function Home() {
       </div>
       
       {/* Profile Button - Top Right */}
-      <div className="absolute top-8 right-8 z-20 scale-75">
-        <Profile />
-      </div>
       
       {/* Navbar */}
       {/* <Navbar activeTab="interview" className="absolute left-1/2 -translate-x-1/2" /> */}
@@ -161,9 +158,13 @@ export default function Home() {
         style={{ backgroundSize: '16px 16px' }}>
       </div>
         <div className = "flex border-b z-20 border-gray-200 justify-between w-full items-center p-6">
-        <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full"/>
+       <div className = "w-full flex justify-start">
+         <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full"/>
+       </div>
           <Navbar />
-          <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full" />
+        <div className = "w-full flex justify-end">
+          <Profile />
+          </div>
         </div>
         <div className = "border-l border-r border-gray-200 w-3xl flex-1" />
                 <div className = "h-px w-full bg-gray-200" />
@@ -351,7 +352,7 @@ export default function Home() {
         {/* Start Button */}
         <button
           onClick={startInterview}
-          className="bg-[#262626] px-4 py-3 flex items-center justify-center gap-2 cursor-pointer rounded-xl  text-base  w-full hover:bg-black  text-white transition-colors"
+          className="bg-[#262626] px-4 py-3 flex items-center justify-center gap-2 cursor-pointer rounded-xl  text-xl font-serif  w-full hover:bg-black  text-white transition-colors"
         >
           <Sparkles size={20} strokeWidth={1.2} />
 

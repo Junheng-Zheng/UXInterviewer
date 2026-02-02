@@ -1,7 +1,7 @@
 "use client";
 import Animatedlink from "../Atoms/Animatedlink";
 import Dynamiccontainer from "../Atoms/Dynamiccontainer";
-import Profile from "../Molecules/Profile";
+import Profile from "../Profile";
 const Profilenavbar = ({ className }) => {
   return (
     <Dynamiccontainer
