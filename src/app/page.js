@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import Results from "./Components/Templates/Results";
 import useStore from "../store/module";
 import Link from "next/link";
-import Refactor from "./refactor/page";
+import Dashboard from "./dashboard/page";
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -126,7 +126,7 @@ export default function Home() {
       </nav>
 
       <Interview /> */}
-      <Refactor />
+      <Dashboard />
     </>
   );
 }

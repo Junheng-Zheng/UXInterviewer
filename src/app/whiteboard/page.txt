@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark } from 'lucide-react';
+import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark, Play, Pause } from 'lucide-react';
 import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
 import useStore from '../../store/module';
 import { AudioLines, Sparkles, X, Keyboard, MousePointer2 } from 'lucide-react';
@@ -26,6 +26,12 @@ export default function WhiteboardPage() {
   const tohelp = useStore((state) => state.tohelp);
   const selectedModel = useStore((state) => state.selectedModel);
   const setEvaluation = useStore((state) => state.setEvaluation);
+  
+  // Get setters for restoring from localStorage
+  const setDesign = useStore((state) => state.setDesign);
+  const setTarget = useStore((state) => state.setTarget);
+  const setTohelp = useStore((state) => state.setTohelp);
+  const setSelectedModel = useStore((state) => state.setSelectedModel);
   const setScreenshot = useStore((state) => state.setScreenshot);
   
   // Get time from URL params, default to 1800 seconds (30 minutes)
@@ -36,8 +42,26 @@ export default function WhiteboardPage() {
   const [isGrading, setIsGrading] = useState(false);
   
   // Excalidraw state
-  const [excalidrawJson, setExcalidrawJson] = useState(null);
-  const [excalidrawKey, setExcalidrawKey] = useState(0); // Key to force re-render
+  // const [excalidrawJson, setExcalidrawJson] = useState({
+  //   elements: [],
+  //   appState: {
+  //     viewBackgroundColor: "#ffffff",
+  //     zenModeEnabled: true,
+  //     currentItemFontFamily: 2,
+  //   },
+  //   files: {},
+  // });
+  // const [excalidrawKey, setExcalidrawKey] = useState(0); // Key to force re-render
+  
+  // Generate unique localStorage key for this interview session
+  const getLocalStorageKey = useCallback(() => {
+    return `whiteboard_${design}_${target}_${tohelp}`.replace(/\s+/g, '_');
+  }, [design, target, tohelp]);
+  
+  // Generate localStorage key for session state (timer, conversation, etc.)
+  const getSessionStorageKey = useCallback(() => {
+    return `session_${design}_${target}_${tohelp}`.replace(/\s+/g, '_');
+  }, [design, target, tohelp]);
   
   // Speech recognition state
   const [transcript, setTranscript] = useState("");
@@ -56,6 +80,12 @@ export default function WhiteboardPage() {
   // Ask questions modal state
   const [showAskQuestions, setShowAskQuestions] = useState(true); // Show by default
   const [question, setQuestion] = useState('');
+  
+  // Home confirmation modal state
+  const [showHomeModal, setShowHomeModal] = useState(false);
+  
+  // Restart confirmation modal state
+  const [showRestartModal, setShowRestartModal] = useState(false);
   
   // Input mode state (speech or keyboard)
   const [inputMode, setInputMode] = useState('keyboard'); // 'speech' or 'keyboard'
@@ -95,6 +125,22 @@ export default function WhiteboardPage() {
   const conversationBoxRef = useRef(null);
   const hasInitialGreetingRef = useRef(false);
   const inputModeRef = useRef(inputMode);
+  const isMicActiveRef = useRef(isMicActive);
+  
+  // Track if localStorage has been loaded
+  const [isLocalStorageLoaded, setIsLocalStorageLoaded] = useState(false);
+  
+  // Stable initialData reference for ExcalidrawWrapper - will be set once from localStorage
+  // Initialize with default empty data
+  const excalidrawInitialDataRef = useRef({
+    elements: [],
+    appState: {
+      viewBackgroundColor: "#ffffff",
+      zenModeEnabled: true,
+      currentItemFontFamily: 2,
+    },
+    files: {},
+  });
   
   const [interviewerMessage, setInterviewerMessage] = useState({
     visible: "",
@@ -498,6 +544,96 @@ export default function WhiteboardPage() {
     // Don't close the modal or switch modes - stay in keyboard mode
   };
 
+  // Handle home button click
+  const handleGoHome = () => {
+    setShowHomeModal(true);
+  };
+
+  // Confirm going home (discard progress)
+  const confirmGoHome = () => {
+    // Stop all audio and recognition
+    stopAudio();
+    stopRecognition();
+    stopMicrophone();
+    
+    // Clear localStorage for this session (both whiteboard and session state)
+    if (design && target && tohelp) {
+      const storageKey = getLocalStorageKey();
+      const sessionKey = getSessionStorageKey();
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(sessionKey);
+      console.log('Discarded whiteboard and session data');
+    }
+    
+    // Navigate to home
+    router.push('/');
+  };
+
+  // Handle restart button click
+  const handleRestart = () => {
+    setShowRestartModal(true);
+  };
+
+  // Confirm restart interview
+  const confirmRestart = () => {
+    // Stop all audio and recognition
+    stopAudio();
+    stopRecognition();
+    stopMicrophone();
+    
+    // Clear localStorage for this session (both whiteboard and session state)
+    if (design && target && tohelp) {
+      const storageKey = getLocalStorageKey();
+      const sessionKey = getSessionStorageKey();
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(sessionKey);
+      console.log('Cleared whiteboard and session data for restart');
+    }
+    
+    // Reset whiteboard
+    // setExcalidrawJson({
+    //   elements: [],
+    //   appState: {
+    //     viewBackgroundColor: "#ffffff",
+    //     zenModeEnabled: true,
+    //     currentItemFontFamily: 2,
+    //   },
+    //   files: {},
+    // });
+    // setExcalidrawKey((prev) => prev + 1);
+
+    excalidrawAPIRef.current?.updateScene({
+  elements: [],
+  files: {},
+  appState: {
+    ...excalidrawAPIRef.current.getAppState(),
+    viewBackgroundColor: "#ffffff",
+    zenModeEnabled: true,
+    currentItemFontFamily: 2,
+  },
+});
+
+
+    
+    // Reset timer
+    setTimeRemaining(initialTime);
+    setIsPaused(false);
+    
+    // Clear conversation history
+    setConversationHistory([]);
+    setCurrentUserMessage("");
+    setInterimTranscript("");
+    setTranscript("");
+    
+    // Reset AI greeting
+    hasInitialGreetingRef.current = false;
+    
+    // Close modal
+    setShowRestartModal(false);
+    
+    console.log('Interview restarted');
+  };
+
   // Start microphone for voice visualization
   const startMicrophone = async () => {
     // Prevent starting if already active (check refs, not state)
@@ -623,9 +759,31 @@ export default function WhiteboardPage() {
   // Toggle microphone
   const toggleMicrophone = () => {
     if (isMicActive) {
+      // Stop both microphone AND speech recognition
       stopMicrophone();
+      stopRecognition();
+      
+      // Clear any accumulated transcription
+      setCurrentUserMessage("");
+      currentUserMessageRef.current = "";
+      setInterimTranscript("");
+      
+      // Clear silence timer
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      
+      console.log('Muted: Stopped microphone and speech recognition');
     } else {
+      // Start both microphone AND speech recognition (if in speech mode)
       startMicrophone();
+      if (inputMode === 'speech') {
+        setTimeout(() => {
+          startRecognition();
+          console.log('Unmuted: Started microphone and speech recognition');
+        }, 100);
+      }
     }
   };
 
@@ -857,6 +1015,15 @@ export default function WhiteboardPage() {
       setScreenshot(screenshotBase64);
       console.log("Screenshot stored:", screenshotBase64 ? `${screenshotBase64.substring(0, 50)}...` : "null");
       console.log("Evaluation complete - grading page will automatically update");
+      
+      // Clear localStorage for this session after successful submission
+      if (design && target && tohelp) {
+        const storageKey = getLocalStorageKey();
+        const sessionKey = getSessionStorageKey();
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(sessionKey);
+        console.log('Cleared interview data from localStorage after successful submission');
+      }
     } catch (error) {
       console.error("Error grading submission:", error);
       alert(error.message || "Failed to grade submission. Please try again.");
@@ -866,30 +1033,31 @@ export default function WhiteboardPage() {
   };
 
   // Load test JSON into Excalidraw
-  const loadTestJSON = async () => {
-    try {
-      const response = await fetch("/test-excalidraw.json");
-      const data = await response.json();
+const loadTestJSON = async () => {
+  try {
+    const response = await fetch("/test-excalidraw.json");
+    const data = await response.json();
 
-      if (!data.elements || !Array.isArray(data.elements)) {
-        console.error("Invalid JSON structure: missing elements array");
-        alert("The test JSON file doesn't contain valid Excalidraw elements.");
-        return;
-      }
+    if (!data.elements || !Array.isArray(data.elements)) {
+      alert("Invalid Excalidraw JSON");
+      return;
+    }
 
-      // Set the JSON data with scrollToContent and zoomToFitOnFileOpen to auto-zoom
-      // This will automatically zoom and scroll to fit all content (equivalent to Shift+1)
-      setExcalidrawJson({
-        ...data,
+    excalidrawAPIRef.current?.updateScene({
+      elements: data.elements,
+      files: data.files || {},
+      appState: {
+        ...excalidrawAPIRef.current.getAppState(),
+        ...data.appState,
         scrollToContent: true,
         zoomToFitOnFileOpen: true,
-      });
-      setExcalidrawKey((prev) => prev + 1);
-    } catch (error) {
-      console.error("Error loading test JSON:", error);
-      alert("Failed to load test diagram. Make sure test-excalidraw.json exists in the public folder.");
-    }
-  };
+      },
+    });
+  } catch (err) {
+    console.error("Failed to load test JSON:", err);
+  }
+};
+
 
   // Update refs when state changes so event handlers can access current values
   useEffect(() => {
@@ -924,6 +1092,10 @@ export default function WhiteboardPage() {
     inputModeRef.current = inputMode;
   }, [inputMode]);
 
+  useEffect(() => {
+    isMicActiveRef.current = isMicActive;
+  }, [isMicActive]);
+
   // Countdown timer
   useEffect(() => {
     if (timeRemaining <= 0 || isPaused || isSubmitted) return;
@@ -942,9 +1114,39 @@ export default function WhiteboardPage() {
     return () => clearInterval(timer);
   }, [timeRemaining, isPaused, isSubmitted]);
 
-  // Check if interview parameters are set on mount
+  // Save interview parameters to localStorage when they change
+  useEffect(() => {
+    if (design && target && tohelp) {
+      const interviewParams = { design, target, tohelp, selectedModel };
+      localStorage.setItem('current_interview_params', JSON.stringify(interviewParams));
+      console.log('Saved interview parameters to localStorage');
+    }
+  }, [design, target, tohelp, selectedModel]);
+
+  // Load interview parameters from localStorage on mount if missing from store
   useEffect(() => {
     if (!design || !target || !tohelp) {
+      const savedParams = localStorage.getItem('current_interview_params');
+      
+      if (savedParams) {
+        try {
+          const params = JSON.parse(savedParams);
+          console.log('Loaded interview parameters from localStorage:', params);
+          
+          // Restore to Zustand store
+          if (params.design) setDesign(params.design);
+          if (params.target) setTarget(params.target);
+          if (params.tohelp) setTohelp(params.tohelp);
+          if (params.selectedModel) setSelectedModel(params.selectedModel);
+          
+          // Don't show warning if we restored from localStorage
+          return;
+        } catch (error) {
+          console.error('Error loading interview parameters:', error);
+        }
+      }
+      
+      // If still no params after trying localStorage, show warning
       console.warn("Interview parameters missing:", { design, target, tohelp });
       const timer = setTimeout(() => {
         if (confirm("Interview parameters are missing. Would you like to go to the setup page?")) {
@@ -953,7 +1155,350 @@ export default function WhiteboardPage() {
       }, 1000);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only on mount
+
+  // Load whiteboard data from localStorage on mount - BEFORE rendering ExcalidrawWrapper
+  useEffect(() => {
+    console.log('📂 Load whiteboard effect running:', {
+      isLocalStorageLoaded,
+      hasDesign: !!design,
+      hasTarget: !!target,
+      hasTohelp: !!tohelp
+    });
+    
+    // Only run once when we have design params
+    if (isLocalStorageLoaded) {
+      console.log('⏭️ Already loaded, skipping');
+      return;
+    }
+    
+    // Wait until we have the interview params before loading
+    if (!design || !target || !tohelp) {
+      console.log('⏳ Waiting for interview params before loading whiteboard data');
+      return;
+    }
+    
+    // Default data structure
+    const defaultData = {
+      elements: [],
+      appState: {
+        viewBackgroundColor: "#ffffff",
+        zenModeEnabled: true,
+        currentItemFontFamily: 2,
+      },
+      files: {},
+    };
+    
+    // Now we have params, try to load from localStorage
+    const storageKey = getLocalStorageKey();
+    console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
+    const savedData = localStorage.getItem(storageKey);
+    
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        
+        // Log what we're loading
+        const numElements = parsedData.elements?.length || 0;
+        const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
+        console.log('✅ Loaded whiteboard data from localStorage:', {
+          key: storageKey,
+          elementsCount: numElements,
+          filesCount: numFiles,
+          dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
+        });
+        
+        // Sanitize appState to remove/fix problematic properties
+        if (parsedData.appState) {
+          delete parsedData.appState.collaborators;
+          delete parsedData.appState.openMenu;
+          delete parsedData.appState.isLoading;
+        }
+        
+        // Set the initialData ref with loaded data
+        excalidrawInitialDataRef.current = {
+          elements: parsedData.elements || [],
+          appState: {
+            ...defaultData.appState,
+            ...(parsedData.appState || {}),
+          },
+          files: parsedData.files || {},
+        };
+        
+        console.log('📦 Set initialData from localStorage with', numElements, 'elements');
+      } catch (error) {
+        console.error('❌ Error loading whiteboard data from localStorage:', error);
+        excalidrawInitialDataRef.current = defaultData;
+      }
+    } else {
+      console.log('ℹ️ No saved whiteboard data found, using default empty canvas');
+      excalidrawInitialDataRef.current = defaultData;
+    }
+    
+    // Mark as loaded to trigger re-render and show ExcalidrawWrapper
+    setIsLocalStorageLoaded(true);
+  }, [design, target, tohelp, getLocalStorageKey, isLocalStorageLoaded]);
+
+  // Track if session state has been loaded
+  const [isSessionLoaded, setIsSessionLoaded] = useState(false);
+
+  // Load session state (timer, conversation, etc.) from localStorage on mount
+  useEffect(() => {
+    // Only run once when we have design params
+    if (isSessionLoaded) return;
+    
+    // Wait until we have the interview params before loading
+    if (!design || !target || !tohelp) {
+      console.log('⏳ Waiting for interview params before loading session state');
+      return;
+    }
+    
+    // Now we have params, try to load session state
+    const sessionKey = getSessionStorageKey();
+    console.log('🔍 Attempting to load session state with key:', sessionKey);
+    const savedSession = localStorage.getItem(sessionKey);
+    
+    if (savedSession) {
+      try {
+        const parsedSession = JSON.parse(savedSession);
+        
+        console.log('✅ Loaded session state from localStorage:', {
+          key: sessionKey,
+          timeRemaining: parsedSession.timeRemaining,
+          conversationCount: parsedSession.conversationHistory?.length || 0,
+          hasInitialGreeting: parsedSession.hasInitialGreeting,
+          lastSaved: parsedSession.lastSaved ? new Date(parsedSession.lastSaved).toISOString() : 'unknown',
+        });
+        
+        // Restore timer (only if there's meaningful time remaining)
+        if (parsedSession.timeRemaining !== undefined && parsedSession.timeRemaining > 0) {
+          setTimeRemaining(parsedSession.timeRemaining);
+          timeRemainingRef.current = parsedSession.timeRemaining;
+          console.log('⏱️ Restored timer to:', parsedSession.timeRemaining, 'seconds');
+        }
+        
+        // Restore conversation history
+        if (parsedSession.conversationHistory && Array.isArray(parsedSession.conversationHistory)) {
+          // Convert timestamp strings back to Date objects
+          const restoredHistory = parsedSession.conversationHistory.map(msg => ({
+            ...msg,
+            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          }));
+          setConversationHistory(restoredHistory);
+          console.log('💬 Restored conversation history:', restoredHistory.length, 'messages');
+        }
+        
+        // Restore current user message
+        if (parsedSession.currentUserMessage) {
+          setCurrentUserMessage(parsedSession.currentUserMessage);
+          currentUserMessageRef.current = parsedSession.currentUserMessage;
+        }
+        
+        // Restore input mode
+        if (parsedSession.inputMode) {
+          setInputMode(parsedSession.inputMode);
+          inputModeRef.current = parsedSession.inputMode;
+          console.log('🎤 Restored input mode:', parsedSession.inputMode);
+        }
+        
+        // Restore initial greeting flag
+        if (parsedSession.hasInitialGreeting) {
+          hasInitialGreetingRef.current = true;
+          console.log('👋 Initial greeting already sent, skipping');
+        }
+        
+      } catch (error) {
+        console.error('❌ Error loading session state from localStorage:', error);
+      }
+    } else {
+      console.log('ℹ️ No saved session state found, starting fresh interview');
+    }
+    
+    // Mark session as loaded
+    setIsSessionLoaded(true);
+  }, [design, target, tohelp, getSessionStorageKey, isSessionLoaded]);
+
+  // Track last save time to debounce saves
+  const saveTimeoutRef = useRef(null);
+
+  // Function to save whiteboard data to localStorage
+  const saveToLocalStorage = useCallback((elements, appState, files) => {
+    console.log('📝 saveToLocalStorage called with:', {
+      elementsCount: elements?.length || 0,
+      filesCount: files ? Object.keys(files).length : 0,
+      hasDesign: !!design,
+      hasTarget: !!target,
+      hasTohelp: !!tohelp
+    });
+
+    if (!design || !target || !tohelp) {
+      console.warn('⚠️ Skipping save - missing interview params:', { design, target, tohelp });
+      return;
+    }
+
+    // Clear previous timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounce: save 1 second after last change
+    saveTimeoutRef.current = setTimeout(() => {
+      const storageKey = getLocalStorageKey();
+      console.log('Saving to localStorage with key:', storageKey);
+      
+      // Sanitize appState before saving to avoid serialization issues
+      const cleanAppState = appState ? { ...appState } : {};
+      delete cleanAppState.collaborators; // Remove collaborators (not serializable)
+      delete cleanAppState.openMenu; // Remove UI state
+      delete cleanAppState.isLoading; // Remove transient state
+      
+      // Convert files object to a serializable format
+      const serializableFiles = files ? Object.fromEntries(
+        Object.entries(files).map(([key, file]) => {
+          // For each file, save the essential data
+          return [key, {
+            mimeType: file.mimeType,
+            id: file.id,
+            dataURL: file.dataURL,
+            created: file.created,
+            lastRetrieved: file.lastRetrieved,
+          }];
+        })
+      ) : {};
+      
+      const dataToSave = {
+        elements,
+        appState: cleanAppState,
+        files: serializableFiles,
+        scrollToContent: false,
+      };
+      
+      try {
+        const jsonString = JSON.stringify(dataToSave);
+        localStorage.setItem(storageKey, jsonString);
+        console.log('✅ Successfully saved whiteboard data to localStorage:', {
+          key: storageKey,
+          elementsCount: elements?.length || 0,
+          filesCount: Object.keys(serializableFiles).length,
+          dataSize: (jsonString.length / 1024).toFixed(2) + ' KB'
+        });
+      } catch (error) {
+        console.error('❌ Error saving whiteboard data to localStorage:', error);
+      }
+    }, 1000);
+  }, [design, target, tohelp, getLocalStorageKey]);
+
+  // Track last session save time to debounce saves
+  const sessionSaveTimeoutRef = useRef(null);
+
+  // Function to save session state (timer, conversation, etc.) to localStorage
+  const saveSessionToLocalStorage = useCallback(() => {
+    if (!design || !target || !tohelp) {
+      return;
+    }
+
+    // Clear previous timeout
+    if (sessionSaveTimeoutRef.current) {
+      clearTimeout(sessionSaveTimeoutRef.current);
+    }
+
+    // Debounce: save 500ms after last change
+    sessionSaveTimeoutRef.current = setTimeout(() => {
+      const sessionKey = getSessionStorageKey();
+      
+      const sessionData = {
+        timeRemaining: timeRemainingRef.current,
+        conversationHistory: conversationHistory,
+        currentUserMessage: currentUserMessageRef.current,
+        inputMode: inputModeRef.current,
+        hasInitialGreeting: hasInitialGreetingRef.current,
+        lastSaved: Date.now(),
+      };
+      
+      try {
+        const jsonString = JSON.stringify(sessionData);
+        localStorage.setItem(sessionKey, jsonString);
+        console.log('✅ Saved session state to localStorage:', {
+          key: sessionKey,
+          timeRemaining: sessionData.timeRemaining,
+          conversationCount: sessionData.conversationHistory.length,
+          hasInitialGreeting: sessionData.hasInitialGreeting,
+        });
+      } catch (error) {
+        console.error('❌ Error saving session state to localStorage:', error);
+      }
+    }, 500);
+  }, [design, target, tohelp, getSessionStorageKey, conversationHistory]);
+
+  // Save session state whenever relevant state changes
+  useEffect(() => {
+    saveSessionToLocalStorage();
+  }, [timeRemaining, conversationHistory, inputMode, saveSessionToLocalStorage]);
+
+  // Save immediately before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Force immediate save (bypass debounce) when page is closing
+      if (design && target && tohelp) {
+        // Save whiteboard data
+        if (excalidrawDataRef.current) {
+          const { elements, appState, files } = excalidrawDataRef.current;
+          const storageKey = getLocalStorageKey();
+          
+          const cleanAppState = appState ? { ...appState } : {};
+          delete cleanAppState.collaborators;
+          delete cleanAppState.openMenu;
+          delete cleanAppState.isLoading;
+          
+          const serializableFiles = files ? Object.fromEntries(
+            Object.entries(files).map(([key, file]) => [key, {
+              mimeType: file.mimeType,
+              id: file.id,
+              dataURL: file.dataURL,
+              created: file.created,
+              lastRetrieved: file.lastRetrieved,
+            }])
+          ) : {};
+          
+          const dataToSave = {
+            elements,
+            appState: cleanAppState,
+            files: serializableFiles,
+            scrollToContent: false,
+          };
+          
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+            console.log('💾 Force saved whiteboard on page unload');
+          } catch (error) {
+            console.error('Error force saving whiteboard on unload:', error);
+          }
+        }
+        
+        // Save session state (timer, conversation, etc.)
+        const sessionKey = getSessionStorageKey();
+        const sessionData = {
+          timeRemaining: timeRemainingRef.current,
+          conversationHistory: conversationHistory,
+          currentUserMessage: currentUserMessageRef.current,
+          inputMode: inputModeRef.current,
+          hasInitialGreeting: hasInitialGreetingRef.current,
+          lastSaved: Date.now(),
+        };
+        
+        try {
+          localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+          console.log('💾 Force saved session state on page unload');
+        } catch (error) {
+          console.error('Error force saving session state on unload:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [design, target, tohelp, getLocalStorageKey, getSessionStorageKey, conversationHistory]);
 
   // Auto-scroll conversation box to bottom when messages change
   useEffect(() => {
@@ -962,8 +1507,11 @@ export default function WhiteboardPage() {
     }
   }, [conversationHistory, currentUserMessage, interimTranscript, isProcessingAI]);
 
-  // Generate initial AI greeting when interview starts
+  // Generate initial AI greeting when interview starts (only if session is loaded and no previous greeting)
   useEffect(() => {
+    // Wait for session to be loaded before deciding on initial greeting
+    if (!isSessionLoaded) return;
+    
     if (design && target && tohelp && !hasInitialGreetingRef.current) {
       hasInitialGreetingRef.current = true;
       // Small delay to let everything initialize
@@ -973,7 +1521,7 @@ export default function WhiteboardPage() {
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design, target, tohelp]);
+  }, [design, target, tohelp, isSessionLoaded]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -1094,9 +1642,9 @@ export default function WhiteboardPage() {
       recognition.onerror = (event) => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "no-speech") {
-          // Restart recognition if no speech detected and interview is active
+          // Restart recognition if no speech detected, interview is active, and mic is active
           const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-          if (showInterview && !isPausedRef.current) {
+          if (showInterview && !isPausedRef.current && isMicActiveRef.current) {
             setTimeout(() => {
               startRecognition();
             }, 500);
@@ -1110,9 +1658,9 @@ export default function WhiteboardPage() {
       recognition.onend = () => {
         isRecognitionRunningRef.current = false;
         setIsListening(false);
-        // Only restart recognition if interview is still active and AI is not speaking
+        // Only restart recognition if interview is still active, AI is not speaking, and mic is active
         const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-        if (showInterview && !isPausedRef.current) {
+        if (showInterview && !isPausedRef.current && isMicActiveRef.current) {
           setTimeout(() => {
             startRecognition();
           }, 500);
@@ -1139,6 +1687,12 @@ export default function WhiteboardPage() {
       return;
     }
     
+    // If microphone is muted, stop recognition
+    if (!isMicActive) {
+      stopRecognition();
+      return;
+    }
+    
     if (showInterview && !isPaused) {
       if (isAISpeaking) {
         // Immediately stop recognition when AI starts speaking
@@ -1153,10 +1707,10 @@ export default function WhiteboardPage() {
           silenceTimerRef.current = null;
         }
       } else {
-        // Start recognition when interview is active and AI is not speaking
+        // Start recognition when interview is active, AI is not speaking, and mic is active
         const timeoutId = setTimeout(() => {
-          // Double-check AI is not speaking and still in speech mode
-          if (!isAISpeaking && inputMode === 'speech') {
+          // Double-check all conditions before starting
+          if (!isAISpeaking && inputMode === 'speech' && isMicActive) {
             startRecognition();
           }
         }, 100);
@@ -1167,7 +1721,7 @@ export default function WhiteboardPage() {
       // Stop recognition when interview ends, is paused, or results are shown
       stopRecognition();
     }
-  }, [isSubmitted, isPaused, timeRemaining, isAISpeaking, inputMode]);
+  }, [isSubmitted, isPaused, timeRemaining, isAISpeaking, inputMode, isMicActive]);
 
   // Format time as MM:SS
   const formatTime = (seconds) => {
@@ -1231,58 +1785,79 @@ export default function WhiteboardPage() {
           <div key={index} className="w-px h-full bg-gray-50 rounded-full" />
         ))}
       </div> */}
-      <div className = "p-6 flex flex-col gap-6 h-full border-r  border-gray-200">
-    <House  size={24} strokeWidth={1.5}/>
-    <Redo2 size={24} strokeWidth={1.5}/>
-    <MessageCircleQuestionMark size={24} strokeWidth={1.5}/>
+      <div className = "py-9 px-6 flex flex-col gap-6 h-full border-r  border-gray-200">
+    <button 
+      onClick={handleGoHome}
+      aria-label="Return to home (discard progress)"
+      className="text-gray-700 hover:text-black transition-colors cursor-pointer"
+      title="Return to home"
+    >
+      <House size={24} strokeWidth={1.2}/>
+    </button>
+    <button 
+      onClick={handleRestart}
+      aria-label="Restart interview"
+      className="text-gray-700 hover:text-black transition-colors cursor-pointer"
+      title="Restart interview"
+    >
+      <Redo2 size={24} strokeWidth={1.2}/>
+    </button>
+    {/* <MessageCircleQuestionMark size={24} strokeWidth={1.2}/> */}
   </div>
-        <div className="flex-1 w-full h-full relative p-3 pl-0 rounded-xl overflow-hidden">
-          <ExcalidrawWrapper 
-            key={excalidrawKey}
-            initialData={excalidrawJson}
-            onReady={(api) => {
-              excalidrawAPIRef.current = api;
-            }}
+        <div className="flex-1 w-full h-full relative rounded-xl overflow-visible">
+         {isLocalStorageLoaded ? (
+           <ExcalidrawWrapper
+             initialData={excalidrawInitialDataRef.current}
+             onReady={(api) => {
+               excalidrawAPIRef.current = api;
+             }}
             onChange={(elements, appState, files) => {
+              console.log('🔄 ExcalidrawWrapper onChange fired:', {
+                elementsCount: elements?.length || 0,
+                filesCount: files ? Object.keys(files).length : 0,
+              });
               excalidrawDataRef.current = { elements, appState, files };
+              saveToLocalStorage(elements, appState, files);
             }}
-          />
-      <div
-        class="absolute top-0 left-0 z-50 w-full h-full
-              bg-[radial-gradient(circle,rgba(156,163,175,0.3)_1px,transparent_1px)]
-              bg-[size:16px_16px] pointer-events-none">
-      </div>
-      <div className = "absolute h-full left-0 p-8 z-50 flex-col flex justify-between top-0">
+           />
+         ) : (
+           <div className="w-full h-full flex items-center justify-center bg-white">
+             <p className="text-black font-light text-lg">Loading whiteboard...</p>
+           </div>
+         )}
+
+
+      <div className = "absolute h-full left-0 p-8 z-50 pointer-events-none flex-col flex justify-between top-0">
         <div className="flex  flex-col gap-2 items-start w-full">
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-lg bg-red-100">DESIGN</span>{' '}
-              <span className="font-light">{design || 'a landing page'}</span>
-            </p>
+          <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
+            <div className="text-base flex items-center gap-2 text-black">
+              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-red-100">DESIGN</p>{' '}
+              <p className="font-normal">{design || 'a landing page'}</p>
+            </div>
           </div>
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-lg bg-blue-100">FOR</span>{' '}
-              <span className="font-light">{target || 'a hospital recipient page'}</span>
-            </p>
+          <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
+            <div className="text-base flex items-center gap-2 text-black">
+              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-blue-100">FOR</p>{' '}
+              <p className="font-normal">{target || 'a hospital recipient page'}</p>
+            </div>
           </div>
-          <div className="bg-gray-100 pl-3 pr-5 py-3 rounded-lg w-fit">
-            <p className="text-lg text-black">
-              <span className="font-serif px-3 py-2 rounded-lg bg-pink-100">TO HELP</span>{' '}
-              <span className="font-light">{tohelp || 'neurodivergent people'}</span>
-            </p>
+          <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
+              <div className="text-base flex items-center gap-2 text-black">
+              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-pink-100">TO HELP</p>{' '}
+              <p className="font-normal">{tohelp || 'neurodivergent people'}</p>
+            </div>
           </div>
         </div>
 
         <div className = " flex-col flex gap-3">
-          <div ref={conversationBoxRef} className = "h-[200px]  w-full bg-gray-100 border p-3 border-gray-100  overflow-y-auto rounded-xl z-50 flex flex-col gap-2 scrollbar-hide">
+          <div ref={conversationBoxRef} className = "h-[200px] pointer-events-auto backdrop-blur-sm w-full bg-gray-100/50 border p-3 border-gray-100  overflow-y-auto rounded-xl z-50 flex flex-col gap-2 scrollbar-hide">
             {/* Conversation history */}
             {conversationHistory.map((msg, index) => (
               <div key={index} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 <div className={`px-3 py-2 rounded-lg max-w-[300px] ${
                   msg.role === 'user' 
                     ? 'bg-blue-100 text-black' 
-                    : 'bg-white text-black border border-gray-200'
+                    : 'bg-white text-black'
                 }`}>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 </div>
@@ -1292,7 +1867,7 @@ export default function WhiteboardPage() {
             {/* Current user message being typed/spoken */}
             {(currentUserMessage || interimTranscript) && (
               <div className="flex flex-col gap-1 items-end">
-                <div className="px-3 py-2 rounded-lg max-w-[300px] bg-blue-50 text-black border border-blue-200">
+                <div className="px-3 py-2 rounded-lg max-w-[300px] bg-blue-100">
                   <p className="text-sm whitespace-pre-wrap">
                     {currentUserMessage} <span className="text-gray-400">{interimTranscript}</span>
                   </p>
@@ -1321,38 +1896,33 @@ export default function WhiteboardPage() {
               </div>
             )} */}
             
-            {/* Pending audio play button */}
-            {hasPendingAudio && (
-              <div className="flex flex-col gap-1 items-center">
-                <button
-                  onClick={playPendingAudio}
-                  className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 flex items-center gap-2"
-                >
-                  <i className="fa-solid fa-play"></i>
-                  Play Response
-                </button>
-              </div>
-            )}
+           
           </div>
             <div className="w-full  h-fit  gap-2 flex p-2 bg-white border border-gray-100  overflow-hidden rounded-xl z-50 ">
               {inputMode === 'keyboard' ? (
                 <>
                   <input
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    onKeyDown={() => {
-                      // Unlock audio on first keypress
-                      audioUnlockedRef.current = true;
-                    }}
-                    placeholder="Ask a question"
-                    className="w-full  rounded-lg bg-gray-50 px-3 py-2 resize-none outline-none text-sm text-black"
-                  />
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Unlock audio on first keypress
+                        audioUnlockedRef.current = true;
+                        
+                        // Submit on Enter key
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAskQuestion(e);
+                        }
+                      }}
+                      placeholder="Ask a question"
+                      className="w-full rounded-lg bg-gray-50 px-3 pointer-events-auto py-2 resize-none outline-none text-sm text-black"
+                    />
                   <button 
                     onClick={(e) => {
                       e.preventDefault();
                       handleAskQuestion(e);
                     }}
-                    className="px-3 py-2  text-sm bg-white border border-gray-100  text-black cursor-pointer rounded-xl hover:bg-gray-100"
+                    className="px-3 py-2 pointer-events-auto text-sm bg-white border border-gray-100  text-black cursor-pointer rounded-xl hover:bg-gray-100"
                   >
                     Ask
                   </button>
@@ -1394,7 +1964,7 @@ export default function WhiteboardPage() {
                   {/* Mic Button */}
                   <button 
                     onClick={toggleMicrophone}
-                    className={`px-3 py-2 text-sm  flex items-center gap-2 cursor-pointer rounded-xl transition-colors ${
+                    className={`px-3 py-2 text-sm pointer-events-auto flex items-center gap-2 cursor-pointer rounded-xl transition-colors ${
                       isMicActive 
                         ? 'bg-white border border-gray-100 hover:bg-gray-100' 
                         : 'bg-red-200 hover:bg-red-300'
@@ -1427,7 +1997,7 @@ export default function WhiteboardPage() {
                         setInterimTranscript("");
                       }
                     }}
-                    className={`h-full px-3 py-2 rounded-xl gap-2 flex-nowrap cursor-pointer flex items-center justify-center ${
+                    className={`h-full px-3 py-2 rounded-xl  pointer-events-auto gap-2 flex-nowrap cursor-pointer flex items-center justify-center ${
                       inputMode === 'keyboard' ? 'bg-red-100' : 'bg-white'
                     }`}
                   >
@@ -1442,7 +2012,7 @@ export default function WhiteboardPage() {
                         setTimeout(() => startMicrophone(), 50);
                       }
                     }}
-                    className={`h-full px-3 py-2 rounded-xl gap-2 cursor-pointer flex items-center justify-center ${
+                    className={`h-full px-3 py-2 rounded-xl pointer-events-auto gap-2 cursor-pointer flex items-center justify-center ${
                       inputMode === 'speech' ? 'bg-red-100' : 'bg-white'
                     }`}
                   >
@@ -1452,7 +2022,7 @@ export default function WhiteboardPage() {
                 </div>
           <div className = "w-px  self-stretch bg-gray-200" />
           <div className = "flex w-fit  p-2 items-center gap-2">
-            <button className="px-3 py-2 bg-blue-100 h-fit text-black cursor-pointer flex-nowrap rounded-xl flex items-center gap-2">
+            <button className="px-3 py-2 bg-blue-100 h-fit text-black cursor-pointer pointer-events-auto flex-nowrap rounded-xl flex items-center gap-2">
               <Sparkles size={16} strokeWidth={1.2} />
             Feedback
           </button>
@@ -1475,32 +2045,119 @@ export default function WhiteboardPage() {
           title="Load test diagram"
         >
           <i className="fa-solid fa-file-import text-black"></i>
-          <span className="text-black font-light text-sm">Load Test Diagram</span>
+          <span className="text-black font-normal text-sm">Load Test Diagram</span>
         </button>
       </div> */}
 
       {/* Timer (Top Right Overlay) */}
-      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-6 py-3 z-50 flex items-center gap-3">
-        <Clock className="w-5 h-5  text-black" strokeWidth={1.3} />
-        <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
-          {formatTime(timeRemaining)}
-        </span>
-        <button
+      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-3 py-3 z-50 flex items-center gap-3">
+              <button
           onClick={() => setIsPaused((prev) => !prev)}
           className="ml-2 text-black hover:text-gray-600"
         >
-          <i className={`fa-solid ${isPaused ? "fa-play" : "fa-pause"}`}></i>
+          {isPaused ? <Play size={16} strokeWidth={1.2} /> : <Pause size={16} strokeWidth={1.2} />}
         </button>
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl">
+          <Clock className="w-5 h-5  text-black" size={16} strokeWidth={1.3} />
+        <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
+          {formatTime(timeRemaining)}
+        </span>
+      </div>
+
         <button
           onClick={handleSubmit}
           disabled={isGrading}
-          className="ml-2 px-3 py-1 bg-[#3168f5] text-white rounded-lg hover:bg-[#2557d4] transition-colors disabled:opacity-50"
+          className="px-3 py-2 bg-blue-100 rounded-lg hover:bg-blue-200  cursor-pointer transition-colors disabled:opacity-50"
         >
           {isGrading ? "Grading..." : "Submit"}
         </button>
       </div>
 
       {/* Interviewer Card (Bottom Left Overlay) */}
+
+      {/* Home Confirmation Modal */}
+      {showHomeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ zIndex: 9999 }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowHomeModal(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full ">
+            <div className="flex flex-col gap-6">
+                            {/* Title */}
+              <div className="flex flex-col gap-2">
+                <h2 className="text-2xl font-serif text-black">
+                  Return to Home?
+                </h2>
+                <p className="text-base text-gray-600">
+                  Your progress will not be saved and will be discarded. This action cannot be undone.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowHomeModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gray-100 cursor-pointer hover:bg-gray-200 text-black transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmGoHome}
+                  className="flex-1 px-4 py-3 rounded-xl bg-red-100 cursor-pointer hover:bg-red-200 text-black transition-colors"
+                >
+                  Discard & Go Home
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restart Confirmation Modal */}
+      {showRestartModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ zIndex: 9999 }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowRestartModal(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full ">
+            <div className="flex flex-col gap-6">
+              {/* Title */}
+              <div className="flex flex-col gap-2">
+                <h2 className="text-2xl font-serif text-black">
+                  Restart Interview?
+                </h2>
+                <p className="text-base text-gray-600">
+                  This will clear your whiteboard, reset the timer, and start fresh. Your current progress will be lost.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRestartModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gray-100 cursor-pointer hover:bg-gray-200 text-black transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRestart}
+                  className="flex-1 px-4 py-3 rounded-xl bg-red-100 cursor-pointer hover:bg-red-200 text-black transition-colors"
+                >
+                  Restart Interview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
      
     </div>
     </>

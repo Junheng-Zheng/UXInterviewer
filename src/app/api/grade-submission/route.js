@@ -351,17 +351,34 @@ export async function POST(request) {
           const timestamp = new Date().toISOString();
           
           // Extract scores from evaluation object
-          // The evaluation has diagram_overall_score, technical_overall_score, etc.
+          // Support both new rubric (thinking_score, solution_score, communication_score) 
+          // and old fields (diagram_overall_score, technical_overall_score, transcript_overall_score) for backward compatibility
           const scores = {
-            diagramming: evaluation.diagram_overall_score ?? 0,
-            technical: evaluation.technical_overall_score ?? 0,
-            linguistics: evaluation.transcript_overall_score ?? 0,
+            thinking: evaluation.thinking_score ?? evaluation.diagram_overall_score ?? 0,
+            solution: evaluation.solution_score ?? evaluation.technical_overall_score ?? 0,
+            communication: evaluation.communication_score ?? evaluation.transcript_overall_score ?? 0,
+            // Legacy field names for backward compatibility
+            diagramming: evaluation.diagram_overall_score ?? evaluation.thinking_score ?? 0,
+            technical: evaluation.technical_overall_score ?? evaluation.solution_score ?? 0,
+            linguistics: evaluation.transcript_overall_score ?? evaluation.communication_score ?? 0,
             overall: evaluation.overall_score ?? 0,
           };
           
-          // Extract breakdown from criteria (criteria contains diagramming, technical, linguistic arrays)
+          // Extract breakdown from criteria
+          // Support both new rubric (thinking, solution, communication) and old (diagramming, technical, linguistic)
           const breakdown = [];
           if (evaluation.criteria) {
+            // New rubric fields
+            if (Array.isArray(evaluation.criteria.thinking)) {
+              breakdown.push(...evaluation.criteria.thinking.map(item => ({ ...item, category: 'thinking' })));
+            }
+            if (Array.isArray(evaluation.criteria.solution)) {
+              breakdown.push(...evaluation.criteria.solution.map(item => ({ ...item, category: 'solution' })));
+            }
+            if (Array.isArray(evaluation.criteria.communication)) {
+              breakdown.push(...evaluation.criteria.communication.map(item => ({ ...item, category: 'communication' })));
+            }
+            // Old rubric fields (for backward compatibility)
             if (Array.isArray(evaluation.criteria.diagramming)) {
               breakdown.push(...evaluation.criteria.diagramming.map(item => ({ ...item, category: 'diagramming' })));
             }
