@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../Components/Navbar';
 import { RefreshCw, Sparkles, Keyboard, AudioLines, Tally1, Tally2, Tally3, Zap, Clock     } from 'lucide-react';
+import Profile from '../Components/Molecules/Profile';
 import useStore from '../../store/module';
 
 export default function Home() {
@@ -140,7 +141,13 @@ export default function Home() {
         {Array.from({length: 256}).map((_, index) => (
           <div key={index} className="w-px h-full bg-gray-50 rounded-full" />
         ))}
-      </div> */}
+      </div>
+      
+      {/* Profile Button - Top Right */}
+      <div className="absolute top-8 right-8 z-20 scale-75">
+        <Profile />
+      </div>
+      
       {/* Navbar */}
       {/* <Navbar activeTab="interview" className="absolute left-1/2 -translate-x-1/2" /> */}
 
