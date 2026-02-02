@@ -24,7 +24,7 @@ const Profile = () => {
 
   return (
     <div className = "w-fit h-fit">
-     {isOpen && <button onClick={() => setIsOpen(!isOpen)} className = "w-full  absolute top-0 right-0 h-full cursor-pointer z-100"/>}
+     {isOpen && <button onClick={() => setIsOpen(!isOpen)} className = "w-full  absolute top-0 right-0 h-full cursor-pointer z-500"/>}
           <div className="relative  flex items-center gap-3 ">
       {/* <button
         className="h-[56px] hover:scale-98 transition-all cursor-pointer w-[56px] rounded-full bg-primary "
@@ -42,7 +42,7 @@ const Profile = () => {
           isOpen
             ? "max-h-[300px] border-gray-200 opacity-100 scale-100"
             : "max-h-0 border-transparent opacity-0 scale-95"
-        } absolute bottom-0 right-0 p-4  flex  overflow-hidden bg-gray-50 flex-col gap-4 translate-y-[calc(100%+12px)]  z-150 border w-[240px]  rounded-xl transition-all duration-300`}
+        } absolute bottom-0 right-0 p-4  flex  overflow-hidden bg-gray-50 flex-col gap-4 translate-y-[calc(100%+12px)]  z-500 border w-[240px]  rounded-xl transition-all duration-300`}
       >
         <div className="  flex flex-col gap-4 ">
           <div className="flex items-center justify-between">
