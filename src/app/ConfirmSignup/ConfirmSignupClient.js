@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
+import { Sparkles, Check } from "lucide-react";
 
 
 
 const ConfirmSignup = () => {
-  const [code, setCode] = useState("");
+const [code, setCode] = useState(Array(6).fill(""));
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
@@ -15,7 +17,8 @@ const ConfirmSignup = () => {
   const [success, setSuccess] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-
+const inputsRef = useRef(Array(6).fill(null));
+    const isCodeComplete = code.every((d) => d !== "");
   useEffect(() => {
     // Get email and username from URL params
     const emailParam = searchParams.get("email");
@@ -37,7 +40,9 @@ const ConfirmSignup = () => {
     setError("");
     setLoading(true);
 
-    if (!code) {
+
+
+    if (!isCodeComplete) {
       setError("Verification code is required");
       setLoading(false);
       return;
@@ -58,7 +63,7 @@ const ConfirmSignup = () => {
         body: JSON.stringify({
           email,
           username: username || email, // Use UUID username if available, fallback to email
-          code,
+          code: code.join(""),
         }),
       });
 
@@ -82,43 +87,80 @@ const ConfirmSignup = () => {
     }
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen p-8 flex items-stretch justify-center bg-white text-black">
-        <div className="w-1/2 grow bg-black" />
-        <div className="p-12 flex items-center justify-center w-1/2">
-          <div className="w-full flex flex-col gap-8 max-w-md">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-medium">Email Verified!</h1>
-              <p className="text-gray-500">
-                Your email has been verified successfully.
-              </p>
-              <p className="text-sm text-gray-400 mt-2">
-                Redirecting to sign in...
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  const handleChange = (value, index) => {
+  if (!/^\d?$/.test(value)) return;
+
+  const newCode = [...code];
+  newCode[index] = value;
+  setCode(newCode);
+
+  if (value && index < 5) {
+    inputsRef.current[index + 1]?.focus();
   }
+};
+
+const handleKeyDown = (e, index) => {
+  if (e.key === "Backspace" && !code[index] && index > 0) {
+    inputsRef.current[index - 1]?.focus();
+  }
+};
+
+const handlePaste = (e) => {
+  e.preventDefault();
+  const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+  if (!pasted) return;
+
+  const newCode = pasted.split("");
+  setCode([...newCode, ...Array(6 - newCode.length).fill("")]);
+
+  inputsRef.current[Math.min(pasted.length - 1, 5)]?.focus();
+};
+
+
+  // if (success) {
+  //   return (
+  //     <div className="min-h-screen p-8 flex items-stretch justify-center bg-white text-black">
+  //       <div className="w-1/2 grow bg-black" />
+  //       <div className="p-12 flex items-center justify-center w-1/2">
+  //         <div className="w-full flex flex-col gap-8 max-w-md">
+  //           <div className="flex flex-col gap-1">
+  //             <h1 className="text-2xl font-medium">Email Verified!</h1>
+  //             <p className="text-gray-500">
+  //               Your email has been verified successfully.
+  //             </p>
+  //             <p className="text-sm text-gray-400 mt-2">
+  //               Redirecting to sign in...
+  //             </p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
-    <div className="min-h-screen p-8 flex items-stretch justify-center bg-white text-black">
-      <div className="w-1/2 grow bg-black" />
+    <div className="min-h-screen text-sm flex items-stretch justify-center bg-white text-black">
+     <div className = 'w-1/2 grow bg-black h-dvh  sticky top-0 flex flex-col items-center justify-center'>
+        <Image src = "/talking.png" alt="talking" fill className="object-cover brightness-70" />
+          <div className = "z-20 flex flex-col gap-5 items-center justify-center">
+            <div className = "flex gap-2">
+              <h2 className="text-3xl font-serif font-normal text-white">Ace your next whiteboard technical.</h2> 
+            <Sparkles size={32} strokeWidth={1}  stroke="white" fill="white"/>
+            </div>
+            </div>
+        </div>
+      <div className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none"
+        style={{ backgroundSize: '16px 16px' }}>
+      </div>
       <div className="text-black p-12 flex items-center justify-center w-1/2">
-        <div className="w-full flex flex-col gap-8 max-w-md">
+    {!success ? (
+              <div className="w-full flex  bg-gray-50  z-20 flex-col gap-6 border border-gray-100 rounded-xl p-8 max-w-md">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-medium">Verify Your Email</h1>
+            <h1 className="text-3xl font-serif">Verify Your Email</h1>
             <p className="text-gray-500">
-              We sent a verification code to your email address
+              We sent a 6 digit verification to {email}
             </p>
           </div>
-          {email && (
-            <div className="text-sm text-gray-600">
-              Verification code sent to: <span className="font-medium">{email}</span>
-            </div>
-          )}
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
@@ -126,8 +168,7 @@ const ConfirmSignup = () => {
               </div>
             )}
 
-            <div className="flex flex-col gap-1">
-              <label className="text-sm text-gray-600">Verification Code</label>
+            {/* <div className="flex flex-col gap-1">
               <input
                 type="text"
                 placeholder="Enter 6-digit code"
@@ -141,12 +182,29 @@ const ConfirmSignup = () => {
               <p className="text-xs text-gray-500">
                 Check your email for the verification code
               </p>
+            </div> */}
+            <div className="flex gap-2 justify-between">
+              {code.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(el) => (inputsRef.current[index] = el)}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleChange(e.target.value, index)}
+                  onKeyDown={(e) => handleKeyDown(e, index)}
+                  onPaste={handlePaste}
+                  className="w-full h-14 text-center text-xl border border-gray-200/90 bg-white rounded-xl focus:outline-none focus:border-black"
+                />
+              ))}
             </div>
+
 
             <button
               type="submit"
               disabled={loading || !code}
-              className="border border-gray-300 rounded-md p-2 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cursor-pointer flex gap-4 items-center justify-center w-full hover:scale-102 transition-all duration-300  active:scale-98   bg-black text-xl font-serif  text-white px-5 py-3 rounded-xl"
             >
               {loading ? "Verifying..." : "Verify Email"}
             </button>
@@ -156,6 +214,7 @@ const ConfirmSignup = () => {
               Back to Sign In
             </Link>
             <button
+             disabled={loading || !isCodeComplete}
               onClick={async () => {
                 if (!email) {
                   setError("Email is missing. Please try signing up again.");
@@ -184,6 +243,18 @@ const ConfirmSignup = () => {
             </button>
           </div>
         </div>
+    ) : (
+      <div className="w-full flex  bg-gray-50  z-20 flex-col gap-6 border border-gray-100 rounded-xl p-8 max-w-md">
+        <div className="flex flex-col gap-1">
+          
+          <h1 className="text-3xl font-serif">Email Verified!</h1>
+          <p className="text-gray-500">
+             Redirecting to sign in...
+          </p>
+
+        </div>
+      </div>
+    )}
       </div>
     </div>
   );
