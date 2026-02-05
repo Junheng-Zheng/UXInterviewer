@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark, Play, Pause } from 'lucide-react';
 import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
 import useStore from '../../store/module';
-import { AudioLines, Sparkles, X, Keyboard, MousePointer2 } from 'lucide-react';
+import { AudioLines, Sparkles, X, Keyboard, MousePointer2, SplinePointer, } from 'lucide-react';
+import { UserSearch, HeartHandshake } from 'lucide-react';
 import "@excalidraw/excalidraw/index.css";
 
 // Import exportToBlob for screenshot capture
@@ -546,7 +547,8 @@ export default function WhiteboardPage() {
     if (design && target && tohelp) {
       const storageKey = getLocalStorageKey();
       localStorage.removeItem(storageKey);
-      console.log('Discarded whiteboard data');
+      localStorage.removeItem(`${storageKey}_interview_state`);
+      console.log('Discarded whiteboard data and interview state');
     }
     
     // Navigate to home
@@ -569,7 +571,8 @@ export default function WhiteboardPage() {
     if (design && target && tohelp) {
       const storageKey = getLocalStorageKey();
       localStorage.removeItem(storageKey);
-      console.log('Cleared whiteboard data for restart');
+      localStorage.removeItem(`${storageKey}_interview_state`);
+      console.log('Cleared whiteboard data and interview state for restart');
     }
     
     // Reset whiteboard
@@ -599,11 +602,14 @@ export default function WhiteboardPage() {
     
     // Reset timer
     setTimeRemaining(initialTime);
+    timeRemainingRef.current = initialTime;
     setIsPaused(false);
+    isPausedRef.current = false;
     
     // Clear conversation history
     setConversationHistory([]);
     setCurrentUserMessage("");
+    currentUserMessageRef.current = "";
     setInterimTranscript("");
     setTranscript("");
     
@@ -1085,6 +1091,7 @@ const loadTestJSON = async () => {
     }, 1000);
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRemaining, isPaused, isSubmitted]);
 
   // Save interview parameters to localStorage when they change
@@ -1136,6 +1143,12 @@ const loadTestJSON = async () => {
     // Only run once when we have design params
     if (isLocalStorageLoaded) return;
     
+    // Wait for design params to be loaded before attempting to load from localStorage
+    if (!design || !target || !tohelp) {
+      console.log('⏳ Waiting for interview parameters to load...');
+      return;
+    }
+    
     // Default data structure
     const defaultData = {
       elements: [],
@@ -1147,87 +1160,134 @@ const loadTestJSON = async () => {
       files: {},
     };
     
-    if (design && target && tohelp) {
-      const storageKey = getLocalStorageKey();
-      console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
-      const savedData = localStorage.getItem(storageKey);
-      
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          
-          // Log what we're loading
-          const numElements = parsedData.elements?.length || 0;
-          const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
-          console.log('✅ Loaded whiteboard data from localStorage:', {
-            key: storageKey,
-            elementsCount: numElements,
-            filesCount: numFiles,
-            dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
-          });
-          
-          // Sanitize appState to remove/fix problematic properties
-          if (parsedData.appState) {
-            delete parsedData.appState.collaborators;
-            delete parsedData.appState.openMenu;
-            delete parsedData.appState.isLoading;
-          }
-          
-          // Set the initialData ref with loaded data
-          excalidrawInitialDataRef.current = {
-            elements: parsedData.elements || [],
-            appState: {
-              ...defaultData.appState,
-              ...(parsedData.appState || {}),
-            },
-            files: parsedData.files || {},
-          };
-          
-          console.log('📦 Set initialData from localStorage');
-        } catch (error) {
-          console.error('❌ Error loading whiteboard data from localStorage:', error);
-          excalidrawInitialDataRef.current = defaultData;
+    const storageKey = getLocalStorageKey();
+    console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
+    console.log('📋 Current localStorage keys:', Object.keys(localStorage).filter(k => k.startsWith('whiteboard_')));
+    const savedData = localStorage.getItem(storageKey);
+    
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        
+        // Log what we're loading
+        const numElements = parsedData.elements?.length || 0;
+        const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
+        console.log('✅ Loaded whiteboard data from localStorage:', {
+          key: storageKey,
+          elementsCount: numElements,
+          filesCount: numFiles,
+          dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
+        });
+        
+        // Sanitize appState to remove/fix problematic properties
+        if (parsedData.appState) {
+          delete parsedData.appState.collaborators;
+          delete parsedData.appState.openMenu;
+          delete parsedData.appState.isLoading;
         }
-      } else {
-        console.log('ℹ️ No saved whiteboard data found, using default');
+        
+        // Set the initialData ref with loaded data
+        excalidrawInitialDataRef.current = {
+          elements: parsedData.elements || [],
+          appState: {
+            ...defaultData.appState,
+            ...(parsedData.appState || {}),
+          },
+          files: parsedData.files || {},
+        };
+        
+        console.log('📦 Set initialData from localStorage');
+      } catch (error) {
+        console.error('❌ Error loading whiteboard data from localStorage:', error);
         excalidrawInitialDataRef.current = defaultData;
       }
     } else {
-      console.log('⚠️ Cannot load whiteboard - missing params, using default');
+      console.log('ℹ️ No saved whiteboard data found, using default');
       excalidrawInitialDataRef.current = defaultData;
+    }
+
+    // Load interview state (timer + conversation)
+    const interviewStateKey = `${storageKey}_interview_state`;
+    const savedInterviewState = localStorage.getItem(interviewStateKey);
+    
+    if (savedInterviewState) {
+      try {
+        const parsedState = JSON.parse(savedInterviewState);
+        console.log('✅ Loaded interview state from localStorage:', {
+          timeRemaining: parsedState.timeRemaining,
+          conversationCount: parsedState.conversationHistory?.length || 0
+        });
+        
+        // Restore timer
+        if (typeof parsedState.timeRemaining === 'number') {
+          setTimeRemaining(parsedState.timeRemaining);
+          timeRemainingRef.current = parsedState.timeRemaining;
+        }
+        
+        // Restore paused state
+        if (typeof parsedState.isPaused === 'boolean') {
+          setIsPaused(parsedState.isPaused);
+          isPausedRef.current = parsedState.isPaused;
+        }
+        
+        // Restore conversation history
+        if (Array.isArray(parsedState.conversationHistory)) {
+          setConversationHistory(parsedState.conversationHistory);
+          
+          // Mark that we've already had the initial greeting
+          if (parsedState.conversationHistory.length > 0) {
+            hasInitialGreetingRef.current = true;
+          }
+        }
+        
+        // Restore interview start time
+        if (parsedState.interviewStartTime) {
+          interviewStartTimeRef.current = parsedState.interviewStartTime;
+        }
+      } catch (error) {
+        console.error('❌ Error loading interview state from localStorage:', error);
+      }
+    } else {
+      console.log('ℹ️ No saved interview state found, starting fresh');
     }
     
     // Mark as loaded to trigger re-render and show ExcalidrawWrapper
     setIsLocalStorageLoaded(true);
+    console.log('✅ localStorage loading complete');
   }, [design, target, tohelp, getLocalStorageKey, isLocalStorageLoaded]);
 
   // Track last save time to debounce saves
   const saveTimeoutRef = useRef(null);
+  const saveInterviewTimeoutRef = useRef(null);
 
   // Function to save whiteboard data to localStorage
   const saveToLocalStorage = useCallback((elements, appState, files) => {
-    console.log('saveToLocalStorage called with:', {
+    console.log('💾 saveToLocalStorage called with:', {
       elementsCount: elements?.length || 0,
       filesCount: files ? Object.keys(files).length : 0,
       hasDesign: !!design,
       hasTarget: !!target,
-      hasTohelp: !!tohelp
+      hasTohelp: !!tohelp,
+      design,
+      target,
+      tohelp
     });
 
     if (!design || !target || !tohelp) {
-      console.warn('Skipping save - missing interview params:', { design, target, tohelp });
+      console.warn('⚠️ Skipping save - missing interview params:', { design, target, tohelp });
       return;
     }
 
     // Clear previous timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
+      console.log('🔄 Cleared previous save timeout');
     }
 
     // Debounce: save 1 second after last change
     saveTimeoutRef.current = setTimeout(() => {
       const storageKey = getLocalStorageKey();
-      console.log('Saving to localStorage with key:', storageKey);
+      console.log('📝 Saving whiteboard to localStorage with key:', storageKey);
       
       // Sanitize appState before saving to avoid serialization issues
       const cleanAppState = appState ? { ...appState } : {};
@@ -1263,7 +1323,8 @@ const loadTestJSON = async () => {
           key: storageKey,
           elementsCount: elements?.length || 0,
           filesCount: Object.keys(serializableFiles).length,
-          dataSize: (jsonString.length / 1024).toFixed(2) + ' KB'
+          dataSize: (jsonString.length / 1024).toFixed(2) + ' KB',
+          timestamp: new Date().toISOString()
         });
       } catch (error) {
         console.error('❌ Error saving whiteboard data to localStorage:', error);
@@ -1271,48 +1332,114 @@ const loadTestJSON = async () => {
     }, 1000);
   }, [design, target, tohelp, getLocalStorageKey]);
 
+  // Function to save interview state (timer + conversation) to localStorage
+  const saveInterviewStateToLocalStorage = useCallback(() => {
+    if (!design || !target || !tohelp) {
+      console.log('⚠️ Skipping interview state save - missing params');
+      return;
+    }
+
+    // Clear previous timeout
+    if (saveInterviewTimeoutRef.current) {
+      clearTimeout(saveInterviewTimeoutRef.current);
+    }
+
+    // Debounce: save 500ms after last change
+    saveInterviewTimeoutRef.current = setTimeout(() => {
+      const storageKey = `${getLocalStorageKey()}_interview_state`;
+      
+      const interviewState = {
+        timeRemaining,
+        isPaused,
+        conversationHistory,
+        interviewStartTime: interviewStartTimeRef.current,
+        lastSaved: Date.now(),
+      };
+      
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(interviewState));
+        console.log('✅ Saved interview state (timer + conversation):', {
+          key: storageKey,
+          timeRemaining,
+          conversationCount: conversationHistory.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('❌ Error saving interview state:', error);
+      }
+    }, 500);
+  }, [design, target, tohelp, getLocalStorageKey, timeRemaining, isPaused, conversationHistory]);
+
+  // Auto-save interview state (timer + conversation) when they change
+  useEffect(() => {
+    if (isLocalStorageLoaded && design && target && tohelp) {
+      saveInterviewStateToLocalStorage();
+    }
+  }, [timeRemaining, conversationHistory, isPaused, isLocalStorageLoaded, design, target, tohelp, saveInterviewStateToLocalStorage]);
+
   // Save immediately before page unload
   useEffect(() => {
     const handleBeforeUnload = () => {
       // Force immediate save (bypass debounce) when page is closing
-      if (excalidrawDataRef.current && design && target && tohelp) {
-        const { elements, appState, files } = excalidrawDataRef.current;
+      if (design && target && tohelp) {
         const storageKey = getLocalStorageKey();
         
-        const cleanAppState = appState ? { ...appState } : {};
-        delete cleanAppState.collaborators;
-        delete cleanAppState.openMenu;
-        delete cleanAppState.isLoading;
+        // Save whiteboard data
+        if (excalidrawDataRef.current) {
+          const { elements, appState, files } = excalidrawDataRef.current;
+          
+          const cleanAppState = appState ? { ...appState } : {};
+          delete cleanAppState.collaborators;
+          delete cleanAppState.openMenu;
+          delete cleanAppState.isLoading;
+          
+          const serializableFiles = files ? Object.fromEntries(
+            Object.entries(files).map(([key, file]) => [key, {
+              mimeType: file.mimeType,
+              id: file.id,
+              dataURL: file.dataURL,
+              created: file.created,
+              lastRetrieved: file.lastRetrieved,
+            }])
+          ) : {};
+          
+          const dataToSave = {
+            elements,
+            appState: cleanAppState,
+            files: serializableFiles,
+            scrollToContent: false,
+          };
+          
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+            console.log('💾 Force saved whiteboard on page unload');
+          } catch (error) {
+            console.error('Error force saving whiteboard on unload:', error);
+          }
+        }
         
-        const serializableFiles = files ? Object.fromEntries(
-          Object.entries(files).map(([key, file]) => [key, {
-            mimeType: file.mimeType,
-            id: file.id,
-            dataURL: file.dataURL,
-            created: file.created,
-            lastRetrieved: file.lastRetrieved,
-          }])
-        ) : {};
-        
-        const dataToSave = {
-          elements,
-          appState: cleanAppState,
-          files: serializableFiles,
-          scrollToContent: false,
+        // Save interview state (timer + conversation)
+        const interviewStateKey = `${storageKey}_interview_state`;
+        const interviewState = {
+          timeRemaining: timeRemainingRef.current,
+          isPaused: isPausedRef.current,
+          conversationHistory,
+          interviewStartTime: interviewStartTimeRef.current,
+          lastSaved: Date.now(),
         };
         
         try {
-          localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-          console.log('💾 Force saved on page unload');
+          localStorage.setItem(interviewStateKey, JSON.stringify(interviewState));
+          console.log('💾 Force saved interview state on page unload');
         } catch (error) {
-          console.error('Error force saving on unload:', error);
+          console.error('Error force saving interview state on unload:', error);
         }
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [design, target, tohelp, getLocalStorageKey]);
+  }, [design, target, tohelp, getLocalStorageKey, conversationHistory]);
 
   // Auto-scroll conversation box to bottom when messages change
   useEffect(() => {
@@ -1321,18 +1448,22 @@ const loadTestJSON = async () => {
     }
   }, [conversationHistory, currentUserMessage, interimTranscript, isProcessingAI]);
 
-  // Generate initial AI greeting when interview starts
-  useEffect(() => {
-    if (design && target && tohelp && !hasInitialGreetingRef.current) {
-      hasInitialGreetingRef.current = true;
-      // Small delay to let everything initialize
-      const timer = setTimeout(() => {
-        generateAIResponse("", true); // Empty transcript, isInitialGreeting = true
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design, target, tohelp]);
+// Generate initial AI greeting when interview is fully ready
+useEffect(() => {
+  if (
+    isLocalStorageLoaded &&
+    design &&
+    target &&
+    tohelp &&
+    conversationHistory.length === 0 &&
+    !hasInitialGreetingRef.current
+  ) {
+    hasInitialGreetingRef.current = true;
+
+    generateAIResponse("", true); // AI speaks first
+  }
+}, [isLocalStorageLoaded, design, target, tohelp, conversationHistory.length, generateAIResponse]);
+
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -1484,6 +1615,7 @@ const loadTestJSON = async () => {
         stopRecognition();
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Always listen (start recognition when interview is active and in speech mode)
@@ -1638,20 +1770,26 @@ const loadTestJSON = async () => {
         <div className="flex  flex-col gap-2 items-start w-full">
           <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
             <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-red-100">DESIGN</p>{' '}
-              <p className="font-normal">{design || 'a landing page'}</p>
+              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-red-100 flex items-center gap-2">
+              <SplinePointer size={16} strokeWidth={1.2} />
+              DESIGN</p>{' '}
+              <p className="font-normal">{design || ''}</p>
             </div>
           </div>
           <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
             <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-blue-100">FOR</p>{' '}
-              <p className="font-normal">{target || 'a hospital recipient page'}</p>
+              <div className="font-serif px-3 text-lg py-1 rounded-lg bg-blue-100 flex items-center gap-2">
+              <UserSearch size={16} strokeWidth={1.2} />
+              FOR</div>{' '}
+              <p className="font-normal">{target || ''}</p>
             </div>
           </div>
           <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
               <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-pink-100">TO HELP</p>{' '}
-              <p className="font-normal">{tohelp || 'neurodivergent people'}</p>
+              <div className="font-serif px-3 text-lg py-1 rounded-lg bg-pink-100 flex items-center gap-2">
+              <HeartHandshake size={16} strokeWidth={1.2} />
+              TO HELP</div>{' '}
+              <p className="font-normal">{tohelp || ''}</p>
             </div>
           </div>
         </div>
@@ -1805,7 +1943,7 @@ const loadTestJSON = async () => {
                       }
                     }}
                     className={`h-full px-3 py-2 rounded-xl  pointer-events-auto gap-2 flex-nowrap cursor-pointer flex items-center justify-center ${
-                      inputMode === 'keyboard' ? 'bg-red-100' : 'bg-white'
+                      inputMode === 'keyboard' ? 'bg-black/80 text-white' : 'bg-white'
                     }`}
                   >
                     <Keyboard size={16} strokeWidth={1.2} /> Text
@@ -1820,7 +1958,7 @@ const loadTestJSON = async () => {
                       }
                     }}
                     className={`h-full px-3 py-2 rounded-xl pointer-events-auto gap-2 cursor-pointer flex items-center justify-center ${
-                      inputMode === 'speech' ? 'bg-red-100' : 'bg-white'
+                      inputMode === 'speech' ? 'bg-black/80 text-white' : 'bg-white'
                     }`}
                   >
                     <AudioLines size={16} strokeWidth={1.2} /> Speech
@@ -1866,7 +2004,7 @@ const loadTestJSON = async () => {
         </button>
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl">
           <Clock className="w-5 h-5  text-black" size={16} strokeWidth={1.3} />
-        <span className={`${timeRemaining < 300 ? 'text-[#ef4444]' : 'text-black'}`}>
+        <span className={`${timeRemaining < 300 ? 'text-red-400' : 'text-black'}`}>
           {formatTime(timeRemaining)}
         </span>
       </div>
@@ -1874,9 +2012,10 @@ const loadTestJSON = async () => {
         <button
           onClick={handleSubmit}
           disabled={isGrading}
-          className="px-3 py-2 bg-blue-100 rounded-lg hover:bg-blue-200  cursor-pointer transition-colors disabled:opacity-50"
+          className="px-3 py-2 bg-black/80 rounded-lg flex items-center gap-2 text-white hover:bg-black/90 font-serif text-xl cursor-pointer transition-colors disabled:opacity-50"
         >
           {isGrading ? "Grading..." : "Submit"}
+          <Sparkles size={16} strokeWidth={1.2} />
         </button>
       </div>
 
@@ -2012,3 +2151,6 @@ const loadTestJSON = async () => {
 
   //         </div>
   //     </div>
+
+
+  

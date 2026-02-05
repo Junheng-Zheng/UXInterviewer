@@ -23,87 +23,99 @@ import { motion } from "framer-motion";
 import { useRef } from "react";
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // const [user, setUser] = useState(null);
+  // const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check authentication state
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/auth/me');
-        const data = await response.json();
+  // useEffect(() => {
+  //   // Check authentication state
+  //   const checkAuth = async () => {
+  //     try {
+  //       const response = await fetch('/api/auth/me');
+  //       const data = await response.json();
         
-        if (data.authenticated) {
-          setIsAuthenticated(true);
-          setUser(data.user);
-        } else {
-          setIsAuthenticated(false);
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Auth check error:', error);
-        setIsAuthenticated(false);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+  //       if (data.authenticated) {
+  //         setIsAuthenticated(true);
+  //         setUser(data.user);
+  //       } else {
+  //         setIsAuthenticated(false);
+  //         setUser(null);
+  //       }
+  //     } catch (error) {
+  //       console.error('Auth check error:', error);
+  //       setIsAuthenticated(false);
+  //       setUser(null);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
 
-    checkAuth();
-  }, []);
+  //   checkAuth();
+  // }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center bg-white">
+  //       <div className="text-center">
+  //         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+  //         <p className="text-gray-600">Loading...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // If not authenticated, show home page with sign-in link
-  if (!isAuthenticated) {
-    return (
-      <Landingpage />
-    );
-  }
+  // if (!isAuthenticated) {
+  //   return (
+  //     <Landingpage />
+  //   );
+  // }
+
+  const [authState, setAuthState] = useState("unknown"); // unknown | guest | user
+const [user, setUser] = useState(null);
+
+useEffect(() => {
+  const checkAuth = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+
+      if (data.authenticated) {
+        setUser(data.user);
+        setAuthState("user");
+      } else {
+        setAuthState("guest");
+      }
+    } catch {
+      setAuthState("guest");
+    }
+  };
+
+  checkAuth();
+}, []);
+
+
+
 
   // If authenticated, show the interview interface
+if (authState === "unknown") {
+  return null; // or a tiny skeleton if you want
+}
+
+if (authState === "user") {
   return (
     <>
       <Script id="excalidraw-assets" strategy="beforeInteractive">
         {`window.EXCALIDRAW_ASSET_PATH = "https://unpkg.com/@excalidraw/excalidraw/dist/";`}
       </Script>
-      
-      {/* <nav className="p-4 flex justify-between items-center border-b border-gray-200 bg-white">
-        <div className="flex items-center gap-4">
-          <span className="text-lg font-semibold">UXInterviewer</span>
-        </div>
-        <div className="flex items-center gap-4">
-          {user && (
-            <span className="text-sm text-gray-600">
-              {user.name || user.email}
-            </span>
-          )}
-          <Link
-            href="/api/auth/logout"
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition text-sm"
-          >
-            Sign Out
-          </Link>
-        </div>
-      </nav>
-
-      <Interview /> */}
       <Dashboard />
     </>
   );
 }
 
+return <Landingpage />;
 
+}
 const Landingpage = () => {
     const ref = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -142,7 +154,7 @@ const Landingpage = () => {
       </div>
 
       {/* Navigation Bar */}
-      <div className="w-full xl:px-16 lg:px-12 border-b border-gray-200 lg:py-8 px-5 py-5 flex justify-between items-center relative">
+      <div className="w-full xl:px-16 lg:px-12 border-b bg-white z-20 border-gray-200 lg:py-8 px-5 py-5 flex justify-between items-center relative">
         <div className="w-12 h-12 rounded-lg overflow-hidden relative">
           <Image src="/logo.png" alt="logo" fill />
  
@@ -170,29 +182,29 @@ const Landingpage = () => {
           />
         </button>
         <div
-          className={`flex lg:static bg-white absolute bottom-0 lg:overflow-visible overflow-hidden lg:w-fit w-full left-0 lg:translate-y-0  translate-y-full lg:flex-row flex-col lg:gap-8  items-center ${
+          className={`flex lg:static bg-white absolute bottom-0 z-20 lg:overflow-visible overflow-hidden lg:w-fit w-full left-0 lg:translate-y-0  translate-y-full lg:flex-row flex-col lg:gap-8  items-center ${
             isMenuOpen ? "max-h-screen" : " lg:h-fit max-h-0 "
           } transition-all duration-600`}
         >
           <Link
             href="/"
-            className="lg:w-fit relative w-full  lg:border-0  transition-all duration-300 lg:p-0 py-4 px-4 border-b border-gray-200"
+            className="lg:w-fit relative w-full  xl:border-t-0 border-t  transition-all duration-300 lg:p-0 py-4 px-4 border-b border-gray-200"
           >
             Home
-            <div className="w-full absolute -bottom-1 left-0 translate-y-full h-px bg-gray-200"></div>
+          
           </Link>
        
           <div className="lg:w-fit w-full lg:p-0 lg:border-0 p-4 border-b border-gray-200">
             <div className="flex rounded-xl lg:w-fit w-full overflow-hidden  border border-gray-200">
               <Link
                 href="/Signin"
-                className="lg:w-fit w-full  hover:bg-gray-50  hover:px-6  transition-all duration-300 lg:p-3 lg:px-4 py-4 px-4 border-r border-gray-200"
+                className="lg:w-fit w-full  hover:bg-gray-50  hover:px-6  transition-all duration-300 lg:p-3 lg:px-3 py-3 flex items-center justify-center px-4 border-r border-gray-200"
               >
                 Sign In
               </Link>
               <Link
                 href="/Signup"
-                className="lg:w-fit w-full lg:p-3 hover:bg-gray-50  hover:px-6  transition-all duration-300 lg:px-4 py-4 px-4 lg:border-0 "
+                className="lg:w-fit w-full lg:p-3 hover:bg-gray-50  hover:px-6  transition-all duration-300 lg:px-4 py-3 flex items-center justify-center px-4 lg:border-0 "
               >
                 Sign Up
               </Link>
@@ -207,7 +219,7 @@ const Landingpage = () => {
           Live Interviews
         </div> */}
 
-        <motion.h1
+        {/* <motion.h1
           initial={{ translateY: 20, opacity: 0 }}
           animate={{ translateY: 0, opacity: 1 }}
           transition={{
@@ -218,14 +230,43 @@ const Landingpage = () => {
           className="xl:text-5xl lg:text-4xl tracking-tight flex  gap-2 lg:text-center text-3xl "
         >
         
-          <span className="font-serif lg:text-5xl xl:text-5xl text-4xl">
+          <span className="font-serif lg:text-5xl xl:text-5xl text-2xl">
             We Help UX Designers Prep for
           </span>
-          <SplinePointer size={44} strokeWidth={1.2}   fill="lab(92.0301% -2.24757 -11.6453)"/>
+          <SplinePointer size={44} strokeWidth={1.2}   fill="  lab(92.0301% -2.24757 -11.6453)"/>
                     <span className="font-serif lg:text-5xl xl:text-5xl text-4xl">
             Whiteboard Interviews.
           </span>
-        </motion.h1>
+        </motion.h1> */}
+
+          <motion.h1
+          initial={{ translateY: 20, opacity: 0 }}
+          animate={{ translateY: 0, opacity: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 80,
+            damping: 20,
+          }} className="font-serif lg:text-5xl xl:text-5xl text-4xl tracking-tight gap-2">
+  We Help UX Designers 
+  Prep for {" "}
+  
+<SplinePointer
+  strokeWidth={1.2}
+  className="
+    inline-block 
+    w-7 h-7
+    md:w-8 md:h-8
+    lg:w-9 lg:h-9
+    xl:w-10 xl:h-10
+    -translate-y-[4px]
+  "
+  fill="lab(92.0301% -2.24757 -11.6453)"
+/>
+
+
+  {" "} Whiteboard Interviews.
+</motion.h1>
+
         <div className="overflow-hidden xl:w-1/2 md:w-2/3 w-full">
           <motion.p
             initial={{ translateY: 80, opacity: 0 }}
@@ -318,7 +359,7 @@ const Landingpage = () => {
               setSelectedFeature(FEATURES[0]);
             }}
             viewport={{ amount: 0.5 }}
-            className=" h-dvh relative overflow-hidden border-b  xl:px-16  lg:px-12 bg-gray-100  border-gray-200 flex items-center justify-center w-full"
+            className=" h-dvh relative overflow-hidden border-b  xl:px-16  z-20 lg:px-12 bg-gray-100  border-gray-200 flex items-center justify-center w-full"
           >
 
             <div className="perspective-[1000px]  w-full">
@@ -343,7 +384,15 @@ const Landingpage = () => {
                   transformStyle: "preserve-3d",
                 }}
               >
-                <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
+                <div className = "w-full bg-gray-200 rounded-lg">
+                  <video 
+                  className = "w-full  bg-gray-200 rounded-lg"
+                  src="/landingpage/promptselect.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
+                </div>
               </motion.div>
             </div>
 
@@ -416,37 +465,45 @@ const Landingpage = () => {
                   transformStyle: "preserve-3d",
                 }}
               >
-                <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
+                <div className = "w-full aspect-video bg-gray-200 rounded-lg">
+                  <video 
+                  className = "w-full aspect-video bg-gray-200 rounded-lg"
+                  src="/video.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
+                </div>
               </motion.div>
             </div>
           </motion.div>
         </div>
       </div>
       {/* Features Section MOBILE */}
-      <div className="w-full lg:hidden px-5 py-16     justify-center    flex flex-col gap-4">
-        <p className=" uppercase text-xs  text-orange-600 ">
+      <div className="w-full lg:hidden px-5 py-16  border-b border-gray-200   justify-center    flex flex-col gap-4">
+        <p className=" text-sm  bg-blue-100 w-fit px-4 py-3 flex items-center gap-2 rounded-xl ">
           {FEATURES[0].subTitle}
         </p>
-        <h2 className=" text-xl font-normal uppercase ">{FEATURES[0].title}</h2>
-        <p className=" uppercase  ">{FEATURES[0].description}</p>
-        <div className = "w-[400px] h-[400px] bg-orange-500 rounded-lg"></div>
+        <h2 className=" text-3xl font-serif font-normal ">{FEATURES[0].title}</h2>
+        <p className="  ">{FEATURES[0].description}</p>
+        <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
       </div>
-      <div className="w-full lg:hidden px-5 py-16   justify-center    flex flex-col gap-4">
-        <p className=" uppercase text-xs text-orange-600 ">
-          {FEATURES[0].subTitle}
+      <div className="w-full lg:hidden px-5 py-16 border-b border-gray-200   justify-center    flex flex-col gap-4">
+        <p className=" text-sm  bg-pink-100 w-fit px-4 py-3 flex items-center gap-2 rounded-xl ">
+          {FEATURES[1].subTitle}
         </p>
-        <h2 className=" text-xl font-normal uppercase">{FEATURES[0].title}</h2>
-        <p className=" uppercase  ">{FEATURES[0].description}</p>
-        <div className = "w-[400px] h-[400px] bg-orange-500 rounded-lg"></div>
+        <h2 className=" text-3xl font-serif font-normal ">{FEATURES[1].title}</h2>
+        <p className="  ">{FEATURES[0].description}</p>
+        <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
       </div>
       <div className="w-full lg:hidden px-5 py-16     justify-center    flex flex-col gap-4">
-        <p className=" uppercase text-xs text-orange-600 ">
-          {FEATURES[0].subTitle}
+        <p className=" text-sm  bg-red-100 w-fit px-4 py-3 flex items-center gap-2 rounded-xl ">
+          {FEATURES[2].subTitle}
         </p>
-        <h2 className=" text-xl font-normal uppercase">{FEATURES[0].title}</h2>
-        <p className=" uppercase  ">{FEATURES[0].description}</p>
+        <h2 className=" text-3xl font-serif font-normal ">{FEATURES[2].title}</h2>
+        <p className="  ">{FEATURES[0].description}</p>
         <div className="perspective-[1000px]">
-         <div className = "w-[400px] h-[400px] bg-orange-500 rounded-lg"></div>
+         <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
         </div>
       </div>
       {/* Details section */}
@@ -521,15 +578,15 @@ const Landingpage = () => {
 
       {/* Footer */}
       <div className="bg-white ">
-        <div className = "w-full h-[400px] z-20 relative bg-white ">
+        <div className = "w-full xl:h-[400px] h-[300px] z-20 relative bg-white ">
          <div className = "w-full h-full relative flex flex-col justify-center items-center gap-4">
                      <div className = "z-20 flex flex-col gap-5 items-center justify-center">
 
-                      <div className = "flex gap-2">
-                        <h2 className="text-4xl font-serif font-normal text-white">Start Prepping for your next interview.</h2> 
-                      <Sparkles size={36} strokeWidth={1}  stroke="white" fill="white"/>
+                      <div className = "flex gap-2 items-center justify-center">
+                        <h2 className="xl:text-4xl text-2xl font-serif font-normal text-white">Ace your next whiteboard technical.</h2> 
+                      <Sparkles className="text-white xl:w-6 xl:h-6 " strokeWidth={1}  stroke="white" fill="white"/>
                       </div>
-                     <button className="cursor-pointer sm:w-fit flex gap-4 items-center justify-center w-full hover:scale-102 transition-all duration-300  active:scale-98   bg-black text-xl font-serif  text-white px-5 py-3 rounded-xl">
+                     <button className="cursor-pointer w-fit flex gap-4 items-center justify-center  hover:scale-102 transition-all duration-300  active:scale-98   bg-black text-xl font-serif  text-white px-5 py-3 rounded-xl">
             <svg xmlns="http://www.w3.org/2000/svg"  height="20px" viewBox="-3 0 262 262" preserveAspectRatio="xMidYMid"><path d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027" fill="#4285F4"/><path d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1" fill="#34A853"/><path d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782" fill="#FBBC05"/><path d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251" fill="#EB4335"/></svg>
             Sign in with Google
           </button>
@@ -647,3 +704,4 @@ const Landingpage = () => {
     </div>
   );
 };
+

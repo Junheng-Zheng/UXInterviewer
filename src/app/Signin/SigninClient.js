@@ -69,17 +69,19 @@ const SignIn = () => {
 
   return (
     <div className="min-h-screen  flex items-stretch text-sm justify-center bg-white text-black ">
-      <div className = 'w-1/2 grow bg-black relative flex flex-col items-center justify-center'>
 
-<div className = "absolute w-full h-full  flex p-12 z-20">
-          <Link href="/" className = "z-20  h-fit  text-white cursor-pointer flex items-center gap-2 rounded-lg"><House size={20} strokeWidth={1.3} /> Back</Link>
+      <div className = "absolute w-full h-full  flex p-5 xl:p-12 z-20">
+          <Link href="/" className = "z-20  h-fit  text-black/75 md:text-white cursor-pointer flex items-center gap-2 rounded-lg"><House size={20} strokeWidth={1.3} /> Back</Link>
 </div>
+
+      <div className = 'w-1/2 grow bg-black xl:relative hidden md:flex flex-col items-center justify-center'>
+
 
         <Image src = "/talking.png" alt="talking" fill className="object-cover brightness-70" />
           <div className = "z-20 flex flex-col gap-5 items-center justify-center">
-            <div className = "flex gap-2">
+            <div className = "flex gap-2 items-center justify-center">
               <h2 className="text-3xl font-serif font-normal text-white">Ace your next whiteboard technical.</h2> 
-            <Sparkles size={32} strokeWidth={1}  stroke="white" fill="white"/>
+            <Sparkles size={24} strokeWidth={1}  stroke="white" fill="white"/>
             </div>
             </div>
         </div>
@@ -87,16 +89,16 @@ const SignIn = () => {
         className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none"
         style={{ backgroundSize: '16px 16px' }}>
       </div>
-      <div className="text-black p-12  flex flex-col gap-6 items-center justify-center w-1/2">
+      <div className="text-black xl:p-12 p-5 flex flex-col gap-6 items-center xl:justify-center justify-start py-24 w-full md:w-1/2">
       
         <div className="w-12 h-12 rounded-lg overflow-hidden relative">
             <Image src="/logo.png" alt="logo" fill />
           </div>
-                <div className = "px-3 py-2 w-fit bg-gray-100 rounded-lg flex items-center gap-2">
+                <div className = "px-3 py-2 w-fit bg-gray-100 rounded-lg z-20 flex items-center gap-2">
         <Link href="/Signin" className = "px-3 py-2 w-[80px] bg-black flex flex-col items-center justify-center text-white rounded-lg">Sign In</Link>
         <Link href="/Signup" className = "px-3 py-2 w-[80px] bg-white flex flex-col items-center justify-center  rounded-lg">Sign Up</Link>
         </div>
-        <div className="w-full flex  bg-gray-50  z-20 flex-col gap-6 border border-gray-100 rounded-xl p-8 max-w-md">
+        <div className="w-full flex  bg-gray-50  z-20 flex-col gap-6 border border-gray-100 rounded-xl p-8 xl:max-w-md max-w-full">
 
 
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>

@@ -140,19 +140,19 @@ const handlePaste = (e) => {
 
   return (
     <div className="min-h-screen text-sm flex items-stretch justify-center bg-white text-black">
-     <div className = 'w-1/2 grow bg-black h-dvh  sticky top-0 flex flex-col items-center justify-center'>
+     <div className = 'w-1/2 grow hidden md:flex bg-black h-dvh  sticky top-0 flex-col items-center justify-center'>
         <Image src = "/talking.png" alt="talking" fill className="object-cover brightness-70" />
           <div className = "z-20 flex flex-col gap-5 items-center justify-center">
-            <div className = "flex gap-2">
+            <div className = "flex gap-2 items-center justify-center">
               <h2 className="text-3xl font-serif font-normal text-white">Ace your next whiteboard technical.</h2> 
-            <Sparkles size={32} strokeWidth={1}  stroke="white" fill="white"/>
+            <Sparkles size={24} strokeWidth={1}  stroke="white" fill="white"/>
             </div>
             </div>
         </div>
       <div className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none"
         style={{ backgroundSize: '16px 16px' }}>
       </div>
-      <div className="text-black p-12 flex items-center justify-center w-1/2">
+      <div className="text-black p-5 xl:p-12 flex items-center justify-center w-full md:w-1/2">
     {!success ? (
               <div className="w-full flex  bg-gray-50  z-20 flex-col gap-6 border border-gray-100 rounded-xl p-8 max-w-md">
           <div className="flex flex-col gap-1">

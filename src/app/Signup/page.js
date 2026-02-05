@@ -96,19 +96,23 @@ const SignUp = () => {
     );
   }
 
+  
   return (
-    <div className="h-dvh flex text-sm justify-center text-black">
-      {/* Left panel */}
-  <div className = 'w-1/2  bg-black h-dvh fke  sticky top-0 flex flex-col items-center justify-center'>
+    <div className="xl:h-dvh flex text-sm justify-center text-black">
 
-<div className = "absolute w-full h-full  flex p-12 z-20">
-          <Link href="/" className = "z-20  h-fit  text-white cursor-pointer flex items-center gap-2 rounded-lg"><House size={20} strokeWidth={1.3} /> Back</Link>
+      <div className = "absolute w-full h-full  flex p-5 xl:p-12 z-20">
+          <Link href="/" className = "z-20  h-fit  text-black/75 md:text-white cursor-pointer flex items-center gap-2 rounded-lg"><House size={20} strokeWidth={1.3} /> Back</Link>
 </div>
+
+      {/* Left panel */}
+  <div className = 'w-1/2   bg-black h-dvh hidden  sticky top-0 md:flex flex-col items-center justify-center'>
+
+
         <Image src = "/talking.png" alt="talking" fill className="object-cover brightness-70" />
           <div className = "z-20 flex flex-col gap-5 items-center justify-center">
-            <div className = "flex gap-2">
+            <div className = "flex gap-2 items-center justify-center">
               <h2 className="text-3xl font-serif font-normal text-white">Ace your next whiteboard technical.</h2> 
-            <Sparkles size={32} strokeWidth={1}  stroke="white" fill="white"/>
+            <Sparkles size={24} strokeWidth={1}  stroke="white" fill="white"/>
             </div>
             </div>
         </div>
@@ -117,12 +121,12 @@ const SignUp = () => {
         style={{ backgroundSize: '16px 16px' }}>
       </div>
       {/* Right panel */}
-      <div className="text-black p-12  flex flex-col gap-6 items-center h-full overflow-y-auto scrollbar-hide  w-1/2">
-<div className="flex flex-col gap-6  w-full items-center justify-center">
+      <div className="text-black xl:px-12 xl:py-24 p-5 flex flex-col gap-6 items-center py-24 h-full justify-start  overflow-y-auto scrollbar-hide  w-full md:w-1/2">
+<div className="flex flex-col gap-6   w-full items-center justify-center">
                 <div className="w-12 h-12 rounded-lg overflow-hidden relative">
             <Image src="/logo.png" alt="logo" fill />
           </div>
-                <div className = "px-3 py-2 w-fit bg-gray-100 rounded-lg flex items-center gap-2">
+                <div className = "px-3 py-2 w-fit bg-gray-100 rounded-lg z-20 flex items-center gap-2">
         <Link href="/Signin" className = "px-3 py-2 w-[80px] bg-white flex flex-col items-center justify-center text-black rounded-lg">Sign In</Link>
         <Link href="/Signup" className = "px-3 py-2 w-[80px] bg-black flex flex-col items-center justify-center text-white rounded-lg">Sign Up</Link>
         </div>

@@ -60,7 +60,7 @@ const Profile = () => {
         <Listitem href="/settings">
           <Cog size={16} strokeWidth={1.3} />  Settings
         </Listitem>
-        <Listitem  href="/logout">
+<Listitem href="/api/auth/logout">
           <LogOut size={16} strokeWidth={1.3} />           Logout
         </Listitem>
       </div>

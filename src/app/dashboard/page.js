@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../Components/Navbar';
-import { RefreshCw, Sparkles, Keyboard, AudioLines, Tally1, Tally2, Tally3, Zap, Clock, Mic, Lock, Unlock, ArrowUp     } from 'lucide-react';
+import { RefreshCw, Sparkles, Keyboard, AudioLines, Tally1, Tally2, Tally3, Zap, Clock, Mic, Lock, Unlock, ArrowUp, Plus, Minus     } from 'lucide-react';
 import Profile from '../Components/Profile';
 import useStore from '../../store/module';
 import { SplinePointer } from 'lucide-react';
@@ -32,6 +32,38 @@ export default function Home() {
     input: [],
     output: []
   });
+  
+  // Lock states for each prompt line
+  const [lockedFields, setLockedFields] = useState({
+    design: false,
+    target: false,
+    tohelp: false
+  });
+
+  // Load lock states from localStorage on mount
+  useEffect(() => {
+    const savedLocks = localStorage.getItem('promptLockStates');
+    if (savedLocks) {
+      try {
+        setLockedFields(JSON.parse(savedLocks));
+      } catch (error) {
+        console.error('Error loading lock states:', error);
+      }
+    }
+  }, []);
+
+  // Save lock states to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('promptLockStates', JSON.stringify(lockedFields));
+  }, [lockedFields]);
+
+  // Toggle lock state for a field
+  const toggleLock = (field) => {
+    setLockedFields(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
 
   // Fetch available audio devices
   useEffect(() => {
@@ -56,70 +88,70 @@ export default function Home() {
     getAudioDevices();
   }, []);
 
-  const designOptions = [
-    'a FAQ page',
-    'a landing page',
-    'a product page',
-    'a pricing page',
-    'a signup page',
-    'a login page',
-    'a dashboard page',
-    'a settings page',
-    'a profile page',
-    'a blog page',
-    'a contact page',
-    'a about page',
-    'a services page',
-    'a products page',
-    'a testimonials page'
-  ];
+const [challenges, setChallenges] = useState([]);
 
-  const forOptions = [
-    'a finance tracking app',
-    'a fitness tracking app',
-    'a productivity app',
-    'a task management app',
-    'a calendar app',
-    'a notes app',
-    'a music player app',
-    'a video player app',
-    'a hospital recipient page',
-    'a local coffee shop',
-    'a nonprofit organization',
-    'a tech startup'
-  ];
+  const parseCSV = (text) => {
+  const [header, ...rows] = text.trim().split('\n');
+  const keys = header.split(',');
 
-  const toHelpOptions = [
-    'accountants',
-    'fitness trainers',
-    'productivity experts',
-    'task management experts',
-    'calendar experts',
-    'notes experts',
-    'music players',
-    'video players',
-    'neurodivergent people',
-    'elderly users',
-    'busy professionals',
-    'students'
-  ];
+  return rows.map(row => {
+    const values = row.split(',');
+    return Object.fromEntries(
+      keys.map((key, i) => [key, values[i]])
+    );
+  });
+};
 
-  const reloadChallenge = () => {
-    const randomDesign = designOptions[Math.floor(Math.random() * designOptions.length)];
-    const randomFor = forOptions[Math.floor(Math.random() * forOptions.length)];
-    const randomToHelp = toHelpOptions[Math.floor(Math.random() * toHelpOptions.length)];
 
-    setDesign(randomDesign);
-    setTarget(randomFor);
-    setTohelp(randomToHelp);
+
+useEffect(() => {
+  const loadCSV = async () => {
+    const res = await fetch('/csv/challenges.csv');
+    const text = await res.text();
+    setChallenges(parseCSV(text));
   };
-  
-  // Initialize with random values on mount
-  useEffect(() => {
-    if (!design || !target || !tohelp) {
-      reloadChallenge();
-    }
-  }, []);
+
+  loadCSV();
+}, []);
+
+
+const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const reloadChallenge = () => {
+  if (!challenges.length) return;
+
+  // Only reload unlocked fields
+  if (!lockedFields.design) {
+    const designOptions = challenges.filter(
+      c => c.type === 'design' && c.difficulty === difficulty
+    );
+    setDesign(getRandom(designOptions)?.value);
+  }
+
+  if (!lockedFields.target) {
+    const targetOptions = challenges.filter(
+      c => c.type === 'target' && c.difficulty === difficulty
+    );
+    setTarget(getRandom(targetOptions)?.value);
+  }
+
+  if (!lockedFields.tohelp) {
+    const toHelpOptions = challenges.filter(
+      c => c.type === 'tohelp' && c.difficulty === difficulty
+    );
+    setTohelp(getRandom(toHelpOptions)?.value);
+  }
+};
+
+
+useEffect(() => {
+  if (challenges.length) {
+    reloadChallenge();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [difficulty, challenges]);
+
+
 
   const testMicrophone = async () => {
     try {
@@ -152,7 +184,7 @@ export default function Home() {
       {/* <Navbar activeTab="interview" className="absolute left-1/2 -translate-x-1/2" /> */}
 
       {/* Main Content */}
-      <div className = "flex-1 flex flex-col gap-0 items-center  justify-center p-8">
+      <div className = "flex-1 flex flex-col gap-0 items-center  justify-center xl:p-8">
 
        <div className="flex w-full h-full flex-1 flex-col bg-white relative rounded-xl gap-0 items-center z-1 justify-center">
         
@@ -171,18 +203,48 @@ export default function Home() {
           <Profile />
           </div>
         </div>
-        <div className = "border-l border-r border-gray-200 w-3xl flex-1" />
+        <div className = "border-l border-r border-gray-200 p-5 w-3xl flex h-fit " >
+          <div className = "w-full  border border-gray-200/80 relative overflow-hidden  bg-white  z-20 p-4 flex h-fit gap-4 items-start">
+               <div className="w-11 h-11  rounded-md overflow-hidden relative">
+            <Image src="/logo.png" alt="logo" fill />
+          </div>
+          <div className = "flex flex-col  gap-1">
+            <h3 className="text-2xl font-serif">Start An Interview</h3>
+            <p className="text-gray-500 line-clamp-2  w-2/3">
+              Generate your prompt, reload, choose your difficulty and duration,  and start the interview. 
+            </p>
+<div className="absolute bottom-0 h-full opacity-10 right-0 perspective-[1000px]">
+  <SplinePointer
+    className="
+      block
+      w-full h-full
+      scale-140
+          transform
+      transform-3d
+      origin-center
+      rotate-z-0
+      -rotate-x-32 rotate-y-32
+    "
+    strokeWidth={1.2}
+  />
+</div>
+
+          </div>
+          </div>
+        </div>
                 <div className = "h-px w-full bg-gray-200" />
-        <div className=" border-l border-r border-gray-200  z-20 p-8 flex flex-col gap-5 max-w-3xl relative w-full">
+        <div className=" border-l border-r border-gray-200  z-20 p-5 flex flex-col gap-5 max-w-3xl relative w-full">
         {/* Top Controls */}
           
-        <div className="flex gap-5 items-end">
+        <div className="flex  items-end">
        
           
-          <div className="flex gap-3 items-center justify-center">
+          <div className="flex gap-3 xl:items-center  flex-col xl:flex-row justify-center">
+
+            <div className="flex gap-3">
              <button
             onClick={reloadChallenge}
-            className="border border-gray-200  bg-white px-6 py-4  w-fit flex items-center justify-center gap-2 rounded-xl cursor-pointer text-black font-normal hover:bg-gray-100 transition-colors"
+            className="border border-gray-200  bg-white px-6 py-4  w-fit flex items-center justify-center gap-2 rounded-xl cursor-pointer text-black font-normal hover:bg-gray-50 transition-colors"
           >
 
             <RefreshCw size={16} />
@@ -191,25 +253,7 @@ export default function Home() {
             
           </button>
 
-            {/* <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" /> */}
-            
-            {/* Time Selector */}
-            {/* <div className="flex flex-col gap-2">
-              <p className="text-xl text-black font-serif">Time</p>
-              <div className="flex gap-2.5 items-center">
-                <div className="bg-gray-100 px-4 py-2 rounded-xl flex items-center justify-center">
-                  <input
-                    type="number"
-                    value={time || 30}
-                    onChange={(e) => setTime(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="bg-transparent text-black font-normal w-12 text-center outline-none"
-                    min="1"
-                    max="120"
-                  />
-                </div>
-                <p className="text-black font-normal text-base">Min</p>
-              </div>
-            </div> */}
+      
             <div className="items-center relative flex flex-nowrap w-fit h-fit rounded-xl  bg-gray-100">
 
             <div className = "flex flex-nowrap w-fit p-2 px-4  font-serif text-lg items-center gap-2">
@@ -218,12 +262,33 @@ export default function Home() {
             <div className = "w-px  self-stretch bg-gray-200" />
 
                 <div className = "flex gap-2 flex-nowrap p-2 items-center rounded-xl">
-                  <button className="px-3 py-2 bg-white h-fit text-black cursor-pointer pointer-events-auto flex-nowrap rounded-xl flex items-center gap-2">
-                    <Clock size={16} strokeWidth={1.2} />
-                    {time} Min
-                  </button>
+                 <div className="px-3 py-2 bg-white rounded-xl flex items-center ">
+
+  <button
+    onClick={() => setTime(Math.max(5, time - 5))}
+    className="hover:bg-gray-100 p-1 rounded-lg"
+  >
+    <Minus size={16} strokeWidth={1.2} />
+  </button>
+
+  <span className="min-w-[60px] text-center">
+    {time} Min
+  </span>
+
+  <button
+    onClick={() => setTime(Math.min(60, time + 5))}
+    className="hover:bg-gray-100 p-1 rounded-lg"
+  >
+    <Plus size={16} strokeWidth={1.2} />
+  </button>
+
+</div>
+
                 </div>
             </div>
+
+            </div>
+
 
             {/* <div className="bg-[#e4e4e4] w-px self-stretch rounded-full" /> */}
 
@@ -261,7 +326,7 @@ export default function Home() {
                     className={`px-3 py-2 rounded-xl flex items-center gap-2 cursor-pointer font-normal transition-colors ${
                       difficulty === level
                         ? 'bg-[#262626] text-white'
-                        : 'bg-gray-100 text-black bg-white hover:bg-[#e5e5e5]'
+                        : 'bg-gray-100 text-black bg-white hover:bg-gray-50'
                     }`}
                   >
                     {difficulty === level ? <Zap  size={16} strokeWidth={1.2} stroke="#fcd34d" fill="#fcd34d" /> : <Zap  size={16} strokeWidth={1.2} />} 
@@ -287,39 +352,57 @@ export default function Home() {
             <div className="bg-gray-100   flex items-center h-fit rounded-xl w-fit">
           
             <div className = "flex items-center p-2">
-                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-blue-100">  Design  <SplinePointer size={24} strokeWidth={1.2}  /> </div>{' '}
+                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-blue-100"> <SplinePointer size={24} strokeWidth={1.2}  /> Design </div>{' '}
             </div>
               <div className = "w-px self-stretch bg-gray-200" />
            <div className = "p-2 px-4">
-               <p className="font-normal ">{design || 'a landing page'}</p>
+               <p className="font-normal ">{design || ''}</p>
            </div>
           </div>
-             <Unlock size={20} strokeWidth={1.2}  />
+             <button 
+               onClick={() => toggleLock('design')}
+               className="cursor-pointer hover:opacity-70 transition-opacity"
+               title={lockedFields.design ? "Click to unlock" : "Click to lock"}
+             >
+               {lockedFields.design ? <Lock size={20} strokeWidth={1.5} /> : <Unlock size={20} strokeWidth={1.5} />}
+             </button>
           </div>
             <div className = "flex w-full  justify-between items-center">
             <div className="bg-gray-100   flex items-center h-fit rounded-xl w-fit">
           
             <div className = "flex items-center p-2">
-                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-red-100">  For  <UserSearch size={24} strokeWidth={1.2}  /> </div>{' '}
+                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-red-100">  <UserSearch size={24} strokeWidth={1.2}  /> For </div>{' '}
             </div>
               <div className = "w-px self-stretch bg-gray-200" />
            <div className = "p-2 px-4">
-               <p className="font-normal ">{target || 'a hospital recipient page'}</p>
+               <p className="font-normal ">{target || ''}</p>
            </div>
           </div>
-             <Unlock size={20} strokeWidth={1.2} />
+             <button 
+               onClick={() => toggleLock('target')}
+               className="cursor-pointer hover:opacity-70 transition-opacity"
+               title={lockedFields.target ? "Click to unlock" : "Click to lock"}
+             >
+               {lockedFields.target ? <Lock size={20} strokeWidth={1.5} /> : <Unlock size={20} strokeWidth={1.5} />}
+             </button>
           </div>
           <div className = "flex w-full  justify-between items-center">
           <div className="bg-gray-100   flex items-center h-fit  rounded-xl w-fit">
             <div className = "flex items-center p-2">
-                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-pink-100"> To Help <HeartHandshake  size={24} strokeWidth={1.2}  /> </div>{' '}
+                <div className="font-serif flex items-center gap-2 px-3 py-2 rounded-xl  bg-pink-100"> <HeartHandshake  size={24} strokeWidth={1.2}  /> To Help </div>{' '}
             </div>
               <div className = "w-px self-stretch bg-gray-200" />
            <div className = "p-2 px-4">
-               <p className="font-normal ">{tohelp || 'neurodivergent people'}</p>
+               <p className="font-normal ">{tohelp || ''}</p>
            </div>
           </div>
-          <Unlock size={20} strokeWidth={1.2} />
+          <button 
+            onClick={() => toggleLock('tohelp')}
+            className="cursor-pointer hover:opacity-70 transition-opacity"
+            title={lockedFields.tohelp ? "Click to unlock" : "Click to lock"}
+          >
+            {lockedFields.tohelp ? <Lock size={20} strokeWidth={1.5} /> : <Unlock size={20} strokeWidth={1.5} />}
+          </button>
           </div>
         </div>
 
@@ -385,7 +468,7 @@ export default function Home() {
         </button> */}
           <button
           onClick={startInterview}
-          className="bg-[#262626] flex-1 px-4 py-4 flex items-center justify-center gap-4 cursor-pointer rounded-xl  text-xl font-serif  w-full hover:bg-black  text-white transition-colors"
+          className="bg-[#262626] flex-1 px-4 py-4 flex items-center justify-center gap-2 cursor-pointer rounded-xl  text-xl font-serif  w-full hover:bg-black  text-white transition-colors"
         >
 {/* <svg width="100%" height="auto" viewBox="0 0 120 13" fill="none" xmlns="http://www.w3.org/2000/svg" className = "opacity-80">
 <path d="M2.70933 12.404C2.41067 12.404 2.09067 12.372 1.74933 12.308C1.41867 12.244 1.104 12.1587 0.805333 12.052C0.517333 11.9347 0.288 11.8013 0.117333 11.652C0.064 11.5987 0.0266667 11.5453 0.00533333 11.492C-0.00533333 11.4387 0 11.3587 0.0213333 11.252L0.469333 8.74C0.501333 8.548 0.586667 8.452 0.725333 8.452C0.853333 8.452 0.917333 8.55867 0.917333 8.772L0.933333 9.396C0.954667 10.292 1.10933 10.9373 1.39733 11.332C1.68533 11.7267 2.15467 11.924 2.80533 11.924C3.40267 11.924 3.89867 11.7107 4.29333 11.284C4.688 10.8467 4.88533 10.2653 4.88533 9.54C4.88533 9.07067 4.75733 8.58 4.50133 8.068C4.24533 7.556 3.888 7.044 3.42933 6.532C2.88533 5.924 2.48 5.36933 2.21333 4.868C1.95733 4.36667 1.82933 3.83867 1.82933 3.284C1.82933 2.84667 1.936 2.42533 2.14933 2.02C2.36267 1.604 2.68267 1.26267 3.10933 0.995999C3.54667 0.718666 4.10133 0.58 4.77333 0.58C5.70133 0.58 6.41067 0.788 6.90133 1.204C7.05067 1.32133 7.104 1.49733 7.06133 1.732L6.61333 4.068C6.58133 4.228 6.50667 4.308 6.38933 4.308C6.272 4.308 6.20267 4.21733 6.18133 4.036L6.16533 3.7C6.12267 2.836 6 2.18 5.79733 1.732C5.60533 1.27333 5.216 1.044 4.62933 1.044C4.20267 1.044 3.86133 1.14 3.60533 1.332C3.34933 1.524 3.16267 1.764 3.04533 2.052C2.928 2.32933 2.86933 2.60667 2.86933 2.884C2.86933 3.19333 2.912 3.492 2.99733 3.78C3.08267 4.05733 3.22667 4.356 3.42933 4.676C3.64267 4.98533 3.93067 5.364 4.29333 5.812C4.80533 6.42 5.20533 7.00133 5.49333 7.556C5.78133 8.11067 5.92533 8.64933 5.92533 9.172C5.92533 9.80133 5.78133 10.3613 5.49333 10.852C5.216 11.332 4.83733 11.7107 4.35733 11.988C3.87733 12.2653 3.328 12.404 2.70933 12.404Z" fill="white"/>
@@ -412,7 +495,7 @@ export default function Home() {
             Start Interview
           <ArrowUpRight
             size={20}
-            strokeWidth={1.2}
+            strokeWidth={1.5}
 
           />
           </button>
@@ -421,8 +504,9 @@ export default function Home() {
         </div>
         </div>
         <div className = "h-px w-full bg-gray-200" />
-         <div className = "border-l border-r border-gray-200 w-3xl relative flex-1 overflow-hidden ">
-
+         <div className = "border-l border-r border-gray-200 w-3xl text-gray-400 flex justify-between items-start p-5 relative flex-1 overflow-hidden ">
+          <p>0 of 3 Interviews Used Today</p>
+          <p>Want Unlimited Interviews? <span className = "underline underline-offset-5">Upgrade to Pro</span></p>
          </div>
       </div>
       </div>
