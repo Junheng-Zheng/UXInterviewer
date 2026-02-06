@@ -970,6 +970,7 @@ export default function WhiteboardPage() {
           model: selectedModel,
           completionTimeSeconds: completionTimeSeconds,
           completionTimeMinutes: completionTimeMinutes,
+          timeLimitMinutes: Math.floor(initialTime / 60),
         }),
       });
   

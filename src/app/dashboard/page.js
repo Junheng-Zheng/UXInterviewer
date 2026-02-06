@@ -90,16 +90,18 @@ export default function Home() {
 
 const [challenges, setChallenges] = useState([]);
 
-  const parseCSV = (text) => {
+const parseCSV = (text) => {
   const [header, ...rows] = text.trim().split('\n');
   const keys = header.split(',');
 
-  return rows.map(row => {
-    const values = row.split(',');
-    return Object.fromEntries(
-      keys.map((key, i) => [key, values[i]])
-    );
-  });
+  return rows
+    .filter(row => row.trim()) // Filter out empty rows
+    .map(row => {
+      const values = row.split(',');
+      return Object.fromEntries(
+        keys.map((key, i) => [key.trim(), (values[i] || '').trim()])
+      );
+    });
 };
 
 

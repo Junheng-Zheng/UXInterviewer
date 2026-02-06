@@ -118,6 +118,7 @@ export default function HistoryPage() {
               difficulty: 'Medium', // Default
               date: date,
               time: formatTime(item.completionTimeSeconds),
+              timeLimit: item.timeLimitMinutes ? `${item.timeLimitMinutes}m` : 'N/A',
               submissionId: item.submissionId,
             };
           })
@@ -404,7 +405,7 @@ return (
                       {interview.time}
                     </div>
                     <div className="flex-1 flex justify-center text-sm">
-                      0m
+                      {interview.timeLimit}
                     </div>
                   </div>
                 </Link>

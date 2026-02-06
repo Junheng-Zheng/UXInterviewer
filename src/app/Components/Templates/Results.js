@@ -200,7 +200,7 @@ const Results = ({ submissionData }) => {
                 <p>{submissionData?.timestamp ? formatTimestamp(submissionData.timestamp) : "Just Now"}</p>
                 <p>Productivity</p>
                 <p>Easy</p>
-                <p>15 minutes</p>
+                <p>{submissionData?.timeLimitMinutes ? `${submissionData.timeLimitMinutes} minutes` : 'N/A'}</p>
               </div>
               <div className="gap-4 flex">
                 <Button variant="secondary" icon="fa-solid fa-eye">
