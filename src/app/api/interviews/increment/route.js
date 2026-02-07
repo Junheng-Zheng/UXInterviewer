@@ -13,7 +13,7 @@ export async function POST() {
       );
     }
 
-    const newCount = await incrementInterviewsUsed(session.email);
+    const newCount = await incrementInterviewsUsed(session);
 
     return NextResponse.json({
       success: true,

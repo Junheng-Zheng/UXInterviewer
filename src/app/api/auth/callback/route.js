@@ -34,7 +34,7 @@ export async function GET(request) {
     }
 
     // Exchange code for tokens
-    const tokenSet = await exchangeCodeForTokens(code, storedNonce, state);
+    const tokenSet = await exchangeCodeForTokens(code, storedNonce, state, storedState);
 
     // Get user info from ID token
     const claims = tokenSet.claims();
