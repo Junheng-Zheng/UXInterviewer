@@ -9,6 +9,7 @@ import useStore from '../../store/module';
 import { SplinePointer } from 'lucide-react';
 import { HeartHandshake, UserSearch, ArrowUpRight } from 'lucide-react';
 import Image from 'next/image';
+import { canStartInterview } from '@/lib/interview-validation';
 
 export default function Home() {
   const router = useRouter();
@@ -32,6 +33,12 @@ export default function Home() {
     input: [],
     output: []
   });
+  
+  // Subscription and interview limit state
+  const [subscription, setSubscription] = useState(null);
+  const [interviewsUsed, setInterviewsUsed] = useState(0);
+  const [canStart, setCanStart] = useState(true);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   
   // Lock states for each prompt line
   const [lockedFields, setLockedFields] = useState({
@@ -165,7 +172,108 @@ useEffect(() => {
     }
   };
 
-  const startInterview = () => {
+  // Fetch subscription and interview usage
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      try {
+        setIsLoadingSubscription(true);
+        const response = await fetch('/api/subscription');
+        if (response.ok) {
+          const data = await response.json();
+          setSubscription(data);
+          setInterviewsUsed(data.interviewsUsed || 0);
+          const canStartValue = canStartInterview(data.plan || 'free', data.interviewsUsed || 0);
+          setCanStart(canStartValue);
+        } else {
+          // Default to free plan if API fails
+          setSubscription({ plan: 'free', interviewsUsed: 0 });
+          setInterviewsUsed(0);
+          setCanStart(true);
+        }
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        // Default to free plan on error
+        setSubscription({ plan: 'free', interviewsUsed: 0 });
+        setInterviewsUsed(0);
+        setCanStart(true);
+      } finally {
+        setIsLoadingSubscription(false);
+      }
+    };
+
+    fetchSubscription();
+  }, []);
+
+  const startInterview = async () => {
+    // Client-side validation check
+    if (!canStart) {
+      return;
+    }
+
+    // Server-side validation check
+    try {
+      const response = await fetch('/api/interviews/validate', {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        alert(errorData.reason || 'You have reached your interview limit. Please upgrade to Pro for unlimited interviews.');
+        return;
+      }
+
+      const validationData = await response.json();
+      if (!validationData.canStart) {
+        alert(validationData.reason || 'You have reached your interview limit. Please upgrade to Pro for unlimited interviews.');
+        // Refresh subscription data
+        const subResponse = await fetch('/api/subscription');
+        if (subResponse.ok) {
+          const subData = await subResponse.json();
+          setSubscription(subData);
+          setInterviewsUsed(subData.interviewsUsed || 0);
+          setCanStart(canStartInterview(subData.plan || 'free', subData.interviewsUsed || 0));
+        }
+        return;
+      }
+
+      // Validation passed, now increment the interview count
+      try {
+        const incrementResponse = await fetch('/api/interviews/increment', {
+          method: 'POST',
+        });
+
+        if (!incrementResponse.ok) {
+          const errorData = await incrementResponse.json();
+          alert(errorData.message || errorData.error || 'Failed to start interview. Please try again.');
+          return;
+        }
+
+        const incrementData = await incrementResponse.json();
+        
+        // Update local state with new count
+        if (incrementData.success) {
+          setInterviewsUsed(incrementData.interviewsUsed);
+          // Update subscription object if it exists
+          if (subscription) {
+            setSubscription({
+              ...subscription,
+              interviewsUsed: incrementData.interviewsUsed
+            });
+          }
+          // Update canStart state (in case they just hit the limit)
+          setCanStart(canStartInterview(subscription?.plan || 'free', incrementData.interviewsUsed));
+        }
+      } catch (incrementError) {
+        console.error('Error incrementing interview count:', incrementError);
+        alert('Failed to start interview. Please try again.');
+        return;
+      }
+    } catch (error) {
+      console.error('Error validating interview start:', error);
+      alert('An error occurred while starting the interview. Please try again.');
+      return;
+    }
+
     // Navigate to refactor/whiteboard page with time parameter
     const timeInSeconds = time * 60; // Convert minutes to seconds
     router.push(`/whiteboard?time=${timeInSeconds}`);
@@ -470,7 +578,12 @@ useEffect(() => {
         </button> */}
           <button
           onClick={startInterview}
-          className="bg-[#262626] flex-1 px-4 py-4 flex items-center justify-center gap-2 cursor-pointer rounded-xl  text-xl font-serif  w-full hover:bg-black  text-white transition-colors"
+          disabled={!canStart || isLoadingSubscription}
+          className={`flex-1 px-4 py-4 flex items-center justify-center gap-2 rounded-xl text-xl font-serif w-full transition-colors ${
+            canStart && !isLoadingSubscription
+              ? 'bg-[#262626] cursor-pointer hover:bg-black text-white'
+              : 'bg-gray-300 cursor-not-allowed text-gray-500'
+          }`}
         >
 {/* <svg width="100%" height="auto" viewBox="0 0 120 13" fill="none" xmlns="http://www.w3.org/2000/svg" className = "opacity-80">
 <path d="M2.70933 12.404C2.41067 12.404 2.09067 12.372 1.74933 12.308C1.41867 12.244 1.104 12.1587 0.805333 12.052C0.517333 11.9347 0.288 11.8013 0.117333 11.652C0.064 11.5987 0.0266667 11.5453 0.00533333 11.492C-0.00533333 11.4387 0 11.3587 0.0213333 11.252L0.469333 8.74C0.501333 8.548 0.586667 8.452 0.725333 8.452C0.853333 8.452 0.917333 8.55867 0.917333 8.772L0.933333 9.396C0.954667 10.292 1.10933 10.9373 1.39733 11.332C1.68533 11.7267 2.15467 11.924 2.80533 11.924C3.40267 11.924 3.89867 11.7107 4.29333 11.284C4.688 10.8467 4.88533 10.2653 4.88533 9.54C4.88533 9.07067 4.75733 8.58 4.50133 8.068C4.24533 7.556 3.888 7.044 3.42933 6.532C2.88533 5.924 2.48 5.36933 2.21333 4.868C1.95733 4.36667 1.82933 3.83867 1.82933 3.284C1.82933 2.84667 1.936 2.42533 2.14933 2.02C2.36267 1.604 2.68267 1.26267 3.10933 0.995999C3.54667 0.718666 4.10133 0.58 4.77333 0.58C5.70133 0.58 6.41067 0.788 6.90133 1.204C7.05067 1.32133 7.104 1.49733 7.06133 1.732L6.61333 4.068C6.58133 4.228 6.50667 4.308 6.38933 4.308C6.272 4.308 6.20267 4.21733 6.18133 4.036L6.16533 3.7C6.12267 2.836 6 2.18 5.79733 1.732C5.60533 1.27333 5.216 1.044 4.62933 1.044C4.20267 1.044 3.86133 1.14 3.60533 1.332C3.34933 1.524 3.16267 1.764 3.04533 2.052C2.928 2.32933 2.86933 2.60667 2.86933 2.884C2.86933 3.19333 2.912 3.492 2.99733 3.78C3.08267 4.05733 3.22667 4.356 3.42933 4.676C3.64267 4.98533 3.93067 5.364 4.29333 5.812C4.80533 6.42 5.20533 7.00133 5.49333 7.556C5.78133 8.11067 5.92533 8.64933 5.92533 9.172C5.92533 9.80133 5.78133 10.3613 5.49333 10.852C5.216 11.332 4.83733 11.7107 4.35733 11.988C3.87733 12.2653 3.328 12.404 2.70933 12.404Z" fill="white"/>
@@ -507,8 +620,24 @@ useEffect(() => {
         </div>
         <div className = "h-px w-full bg-gray-200" />
          <div className = "border-l border-r border-gray-200 w-3xl text-gray-400 flex justify-between items-start p-5 relative flex-1 overflow-hidden ">
-          <p>0 of 3 Interviews Used Today</p>
-          <p>Want Unlimited Interviews? <span className = "underline underline-offset-5">Upgrade to Pro</span></p>
+          {isLoadingSubscription ? (
+            <p>Loading...</p>
+          ) : subscription?.plan !== 'free' ? (
+            <p>Unlimited Interviews</p>
+          ) : (
+            <>
+              <p className={interviewsUsed >= 3 ? 'text-red-500 font-semibold' : ''}>
+                {interviewsUsed} of 3 Interviews Used
+              </p>
+              {interviewsUsed >= 3 ? (
+                <p className="text-red-500 font-semibold">
+                  Limit reached. <span className="underline underline-offset-5 cursor-pointer" onClick={() => router.push('/plans')}>Upgrade to Pro</span>
+                </p>
+              ) : (
+                <p>Want Unlimited Interviews? <span className="underline underline-offset-5 cursor-pointer" onClick={() => router.push('/plans')}>Upgrade to Pro</span></p>
+              )}
+            </>
+          )}
          </div>
       </div>
       </div>
