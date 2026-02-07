@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { House, User, SquareArrowOutUpRight, ChevronDown, Save, Mail, Lock, MapPin } from 'lucide-react';
 import { CreditCard } from 'lucide-react';
 import { LogOut } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { BookUser } from 'lucide-react';
 const Page= () => {
@@ -18,6 +18,19 @@ const Page= () => {
   const [subscriptionData, setSubscriptionData] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState(null);
+  const [showVerifyEmailModal, setShowVerifyEmailModal] = useState(false);
+  const [verifyCode, setVerifyCode] = useState(Array(6).fill(''));
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const [emailSuccessMessage, setEmailSuccessMessage] = useState(null);
+  const verifyInputsRef = useRef(Array(6).fill(null));
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -67,6 +80,18 @@ const Page= () => {
     fetchSubscriptionData();
   }, [activeTab]);
 
+  useEffect(() => {
+    if (!emailSuccessMessage) return;
+    const t = setTimeout(() => setEmailSuccessMessage(null), 5000);
+    return () => clearTimeout(t);
+  }, [emailSuccessMessage]);
+
+  useEffect(() => {
+    if (!passwordMessage || !passwordMessage.startsWith('Password updated')) return;
+    const t = setTimeout(() => setPasswordMessage(null), 5000);
+    return () => clearTimeout(t);
+  }, [passwordMessage]);
+
   // Format date helper
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -80,6 +105,175 @@ const Page= () => {
       style: 'currency',
       currency: currency,
     }).format(amount);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileMessage(null);
+    setEmailSuccessMessage(null);
+    setProfileSaving(true);
+    try {
+      const body = {};
+      if (userData.firstName?.trim()) body.firstName = userData.firstName.trim();
+      if (userData.lastName?.trim()) body.lastName = userData.lastName.trim();
+      if (userData.email?.trim()) body.email = userData.email.trim();
+      if (Object.keys(body).length === 0) {
+        setProfileMessage('No changes to save');
+        return;
+      }
+      const response = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save profile');
+      }
+      if (data.profile) {
+        setUserData((prev) => ({
+          firstName: data.profile.givenName ?? prev.firstName,
+          lastName: data.profile.familyName ?? prev.lastName,
+          email: data.profile.email ?? prev.email,
+        }));
+      }
+      if (data.emailVerificationRequired) {
+        setShowVerifyEmailModal(true);
+        setVerifyCode(Array(6).fill(''));
+        setVerifyError('');
+      } else {
+        setProfileMessage('Profile saved.');
+        const refetchRes = await fetch('/api/user/profile');
+        if (refetchRes.ok) {
+          const refetchData = await refetchRes.json();
+          setUserData({
+            firstName: refetchData.givenName ?? '',
+            lastName: refetchData.familyName ?? '',
+            email: refetchData.email ?? '',
+          });
+        }
+      }
+    } catch (error) {
+      setProfileMessage(error.message || 'Failed to save profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleSavePassword = async () => {
+    setPasswordMessage(null);
+    if (!currentPassword.trim()) {
+      setPasswordMessage('Current password is required');
+      return;
+    }
+    if (!newPassword.trim()) {
+      setPasswordMessage('New password is required');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMessage('New password and confirmation do not match');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordMessage('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setPasswordMessage('Password must include one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      setPasswordMessage('Password must include one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setPasswordMessage('Password must include one number');
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      setPasswordMessage('Password must include one special character');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const response = await fetch('/api/user/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: currentPassword.trim(),
+          newPassword: newPassword.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change password');
+      }
+      setPasswordMessage('Password updated.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (error) {
+      setPasswordMessage(error.message || 'Failed to change password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const isVerifyCodeComplete = verifyCode.every((d) => d !== '');
+  const handleVerifyCodeChange = (value, index) => {
+    if (!/^\d?$/.test(value)) return;
+    const newCode = [...verifyCode];
+    newCode[index] = value;
+    setVerifyCode(newCode);
+    if (value && index < 5) verifyInputsRef.current[index + 1]?.focus();
+  };
+  const handleVerifyKeyDown = (e, index) => {
+    if (e.key === 'Backspace' && !verifyCode[index] && index > 0) {
+      verifyInputsRef.current[index - 1]?.focus();
+    }
+  };
+  const handleVerifyPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const newCode = pasted.split('');
+    setVerifyCode([...newCode, ...Array(6 - newCode.length).fill('')]);
+    verifyInputsRef.current[Math.min(pasted.length - 1, 5)]?.focus();
+  };
+  const handleVerifySubmit = async (e) => {
+    e.preventDefault();
+    setVerifyError('');
+    if (!isVerifyCodeComplete) {
+      setVerifyError('Enter the 6-digit code');
+      return;
+    }
+    setVerifyLoading(true);
+    try {
+      const response = await fetch('/api/user/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: verifyCode.join('') }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed');
+      }
+      setEmailSuccessMessage('Email successfully updated');
+      setShowVerifyEmailModal(false);
+      setVerifyCode(Array(6).fill(''));
+      const refetchRes = await fetch('/api/user/profile');
+      if (refetchRes.ok) {
+        const refetchData = await refetchRes.json();
+        setUserData({
+          firstName: refetchData.givenName ?? '',
+          lastName: refetchData.familyName ?? '',
+          email: refetchData.email ?? '',
+        });
+      }
+    } catch (err) {
+      setVerifyError(err.message || 'Verification failed');
+    } finally {
+      setVerifyLoading(false);
+    }
   };
 
   return (
@@ -138,31 +332,25 @@ const Page= () => {
                 <div className = "flex items-center gap-2 w-full">
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">First Name</p>
-                    <input type="text"  defaultValue={userData.firstName || ""} placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text" value={userData.firstName || ""} onChange={(e) => setUserData((prev) => ({ ...prev, firstName: e.target.value }))} placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Last Name</p>
-                    <input type="text"  defaultValue={userData.lastName || ""} placeholder="Doe" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="text" value={userData.lastName || ""} onChange={(e) => setUserData((prev) => ({ ...prev, lastName: e.target.value }))} placeholder="Doe" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                 </div>
               
               </div>
-                <div className = "flex gap-2 items-start">
+                <div className = "flex gap-2 items-center">
                 <div className = "w-64 text-gray-600 flex items-center gap-2"> <Mail size={16} strokeWidth={1.3} className="text-gray-600" /> Email</div>
-                <div className = "flex flex-col items-center gap-8 w-full">
-                 <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">Current Email</p>
-                    <input type="text"  value={userData.email} readOnly className = "w-full bg-gray-50 rounded-xl border border-gray-200 px-4 py-3" />
-                  </div>
-                   <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">New Email</p>
-                    <input type="text"  placeholder="Enter new email" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
-                  </div>
-                
+                <div className = "flex flex-col gap-1 w-full">
+                  <input type="email" value={userData.email || ""} onChange={(e) => setUserData((prev) => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                  {emailSuccessMessage && <p className="text-green-600 text-sm">{emailSuccessMessage}</p>}
                 </div>
               </div>
-            <div className = "w-full flex justify-end">
-              <button className="px-4 py-3 w-fit bg-gray-100 text-gray-600 rounded-lg flex items-center gap-2 "> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> Save Profile Changes</button>
+            <div className = "w-full flex justify-end items-center gap-3">
+              {profileMessage && <p className={profileMessage.startsWith('Profile saved') ? 'text-green-600 text-sm' : 'text-red-600 text-sm'}>{profileMessage}</p>}
+              <button type="button" onClick={handleSaveProfile} disabled={profileSaving} className="px-4 py-3 w-fit bg-gray-100 text-gray-600 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> {profileSaving ? 'Saving...' : 'Save Profile Changes'}</button>
             </div>
             </div>
            </div>
@@ -174,24 +362,25 @@ const Page= () => {
                 <div className = "flex flex-col items-center gap-8 w-full">
                   <div className = "flex gap-2  w-full flex-col">
                     <p className = "text-sm text-gray-600">Current Password</p>
-                    <input type="text"  placeholder="John" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="••••••••" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
 
                        <div className = "flex items-center gap-2 w-full">
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">New Password</p>
-                    <input type="password"  placeholder="••••••••" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                   <div className = "flex gap-2 w-full flex-col">
                     <p className = "text-sm text-gray-600">Confirm New Password</p>
-                    <input type="password"  placeholder="••••••••" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                    <input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} placeholder="••••••••" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
                   </div>
                 </div>
 
                 </div>
               </div>
-              <div className = "w-full flex justify-end">
-               <button className="px-4 py-3 w-fit bg-gray-100 text-gray-600 rounded-lg flex items-center gap-2 "> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> Save Security Changes</button>
+              <div className = "w-full flex justify-end items-center gap-3">
+                {passwordMessage && <p className={passwordMessage.startsWith('Password updated') ? 'text-green-600 text-sm' : 'text-red-600 text-sm'}>{passwordMessage}</p>}
+               <button type="button" onClick={handleSavePassword} disabled={passwordSaving} className="px-4 py-3 w-fit bg-gray-100 text-gray-600 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> {passwordSaving ? 'Saving...' : 'Save Security Changes'}</button>
                </div>
             </div>
          
@@ -417,7 +606,53 @@ const Page= () => {
 
         </div>}
 
-
+        {showVerifyEmailModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" aria-modal="true">
+            <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full mx-4 flex flex-col gap-6">
+              <h3 className="text-2xl font-serif">Verify your new email</h3>
+              <p className="text-gray-500 text-sm">
+                We sent a 6-digit verification code to your new email address. Enter it below.
+              </p>
+              <form onSubmit={handleVerifySubmit} className="flex flex-col gap-4">
+                {verifyError && (
+                  <p className="text-red-600 text-sm">{verifyError}</p>
+                )}
+                <div className="flex gap-2 justify-between">
+                  {verifyCode.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => (verifyInputsRef.current[index] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleVerifyCodeChange(e.target.value, index)}
+                      onKeyDown={(e) => handleVerifyKeyDown(e, index)}
+                      onPaste={index === 0 ? handleVerifyPaste : undefined}
+                      className="w-full h-14 text-center text-xl border border-gray-200 rounded-xl focus:outline-none focus:border-gray-400"
+                    />
+                  ))}
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setShowVerifyEmailModal(false); setVerifyError(''); setVerifyCode(Array(6).fill('')); }}
+                    className="px-4 py-2 text-gray-600 rounded-lg border border-gray-200 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={verifyLoading || !isVerifyCodeComplete}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {verifyLoading ? 'Verifying...' : 'Verify'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         
       </div>
