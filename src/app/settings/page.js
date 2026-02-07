@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { House, User, SquareArrowOutUpRight, ChevronDown, Save, Mail, Lock, MapPin } from 'lucide-react';
+import { House, User, SquareArrowOutUpRight, Save, Mail, Lock, MapPin } from 'lucide-react';
 import { CreditCard } from 'lucide-react';
 import { LogOut } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -31,6 +31,8 @@ const Page= () => {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState(null);
+  const [managePortalLoading, setManagePortalLoading] = useState(false);
+  const [managePortalError, setManagePortalError] = useState(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -239,6 +241,27 @@ const Page= () => {
     setVerifyCode([...newCode, ...Array(6 - newCode.length).fill('')]);
     verifyInputsRef.current[Math.min(pasted.length - 1, 5)]?.focus();
   };
+  const handleManageBilling = async () => {
+    setManagePortalError(null);
+    setManagePortalLoading(true);
+    try {
+      const response = await fetch('/api/stripe/billing-portal', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to open billing portal');
+      }
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error('No portal URL returned');
+    } catch (err) {
+      setManagePortalError(err.message || 'Failed to open billing portal');
+    } finally {
+      setManagePortalLoading(false);
+    }
+  };
+
   const handleVerifySubmit = async (e) => {
     e.preventDefault();
     setVerifyError('');
@@ -422,7 +445,7 @@ const Page= () => {
                         <span>— {formatCurrency(subscriptionData.subscription.amount, subscriptionData.subscription.currency)} / {subscriptionData.subscription.interval}</span>
                       </div>
                     </div>
-                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Manage</button>
+                    <button type="button" onClick={handleManageBilling} disabled={managePortalLoading} className="px-4 py-2 border border-gray-200 bg-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">{managePortalLoading ? 'Opening…' : 'Manage'}</button>
                   </div>
                 ) : (
                   <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
@@ -435,109 +458,41 @@ const Page= () => {
                 )}
 
 
+              {managePortalError && (
+                  <p className="text-red-600 text-sm">{managePortalError}</p>
+                )}
               <div className = "flex gap-2 items-center">
                 <div className = "w-64 text-gray-600 flex items-center gap-2"> <BookUser size={16} strokeWidth={1.3} className="text-gray-600" /> Customer Name</div>
                 <div className = "flex items-center gap-2 w-full">
-                  <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">First Name</p>
-                    <input 
-                      type="text"  
-                      placeholder={subscriptionData?.customer?.name?.split(' ')[0] || userData.firstName || "John"} 
-                      defaultValue={subscriptionData?.customer?.name?.split(' ')[0] || userData.firstName || ""}
-                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-                  <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">Last Name</p>
-                    <input 
-                      type="text"  
-                      placeholder={subscriptionData?.customer?.name?.split(' ').slice(1).join(' ') || userData.lastName || "Doe"} 
-                      defaultValue={subscriptionData?.customer?.name?.split(' ').slice(1).join(' ') || userData.lastName || ""}
-                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
+                  <p className="text-gray-900">{subscriptionData?.customer?.name || '—'}</p>
                 </div>
               </div>
                 <div className = "flex gap-2 items-start">
                 <div className = "w-64 text-gray-600 flex items-center gap-2"> <MapPin size={16} strokeWidth={1.3} className="text-gray-600" /> Billing Address</div>
-                <div className = "flex flex-col items-center gap-8 w-full">
-                 <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">Address Line 1</p>
-                    <input 
-                      type="text"  
-                      placeholder="Enter address" 
-                      defaultValue={subscriptionData?.customer?.address?.line1 || ""}
-                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-                 <div className = "flex gap-2 w-full">
- <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">City</p>
-                    <input 
-                      type="text"  
-                      placeholder="City" 
-                      defaultValue={subscriptionData?.customer?.address?.city || ""}
-                      className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-                  <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">Country</p>
-                    <input 
-                      type="text"  
-                      placeholder="Country" 
-                      defaultValue={subscriptionData?.customer?.address?.country || ""}
-                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-
-                  </div>
-                                   <div className = "flex gap-2 w-full">
-
-                  <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">Zip Code</p>
-                    <input 
-                      type="text"  
-                      placeholder="Zip Code" 
-                      defaultValue={subscriptionData?.customer?.address?.postal_code || ""}
-                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-
-                  <div className = "flex gap-2 w-full flex-col">
-                    <p className = "text-sm text-gray-600">State</p>
-                    <input 
-                      type="text"  
-                      placeholder="State" 
-                      defaultValue={subscriptionData?.customer?.address?.state || ""}
-                      className = "w-full bg-white  rounded-xl border border-gray-200 px-4 py-3" 
-                    />
-                  </div>
-                  </div>
-
-                  
-                  
+                <div className = "flex flex-col gap-1 w-full">
+                  {subscriptionData?.customer?.address && (subscriptionData.customer.address.line1 || subscriptionData.customer.address.city || subscriptionData.customer.address.country) ? (
+                    <p className="text-gray-900">
+                      {[subscriptionData.customer.address.line1, subscriptionData.customer.address.line2].filter(Boolean).join(', ')}
+                      {subscriptionData.customer.address.line1 || subscriptionData.customer.address.line2 ? ' — ' : ''}
+                      {[subscriptionData.customer.address.city, subscriptionData.customer.address.state, subscriptionData.customer.address.postal_code].filter(Boolean).join(', ')}
+                      {subscriptionData.customer.address.country ? ` ${subscriptionData.customer.address.country}` : ''}
+                    </p>
+                  ) : (
+                    <p className="text-gray-500">No address on file</p>
+                  )}
                 </div>
-
-                
               </div>
-              <div className = "w-full flex justify-end">
-               <button className="px-4 py-3 w-fit bg-gray-100 text-gray-600   rounded-lg flex items-center gap-2 "> <Save size={16} strokeWidth={1.3} className="text-gray-600" /> Save Billing Information</button>  
-               </div>
                  {subscriptionData?.paymentMethod ? (
-                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-gray-600">Payment Method</p>
-                      <p className="text-xl font-serif">{subscriptionData.paymentMethod.displayText}</p>
-                    </div>
-                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Update</button>
+                  <div className="flex flex-col gap-2 p-6 rounded-xl bg-gray-100 ">
+                    <p className="text-sm text-gray-600">Payment Method</p>
+                    <p className="text-xl font-serif">{subscriptionData.paymentMethod.displayText}</p>
+                    <p className="text-sm text-gray-500">Update payment method in Stripe via Manage above.</p>
                   </div>
                 ) : (
-                  <div className="flex justify-between items-center p-6 rounded-xl bg-gray-100 ">
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-gray-600">Payment Method</p>
-                      <p className="text-xl font-serif text-gray-500">No payment method on file</p>
-                    </div>
-                    <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg ">Add Payment Method</button>
+                  <div className="flex flex-col gap-2 p-6 rounded-xl bg-gray-100 ">
+                    <p className="text-sm text-gray-600">Payment Method</p>
+                    <p className="text-xl font-serif text-gray-500">No payment method on file</p>
+                    <p className="text-sm text-gray-500">Add or update payment method in Stripe via Manage above.</p>
                   </div>
                 )}
 
@@ -548,9 +503,8 @@ const Page= () => {
             
              <div className = "flex flex-col gap-8 px-24 p-8">
 
-              <div className = "w-full flex justify-between items-center">
+              <div className = "w-full">
                 <h3 className = "text-2xl font-serif">Billing Invoices</h3>
-                <button className="px-4 py-2 border border-gray-200 bg-white rounded-lg flex items-center gap-2 ">January 2026 <ChevronDown size={16} strokeWidth={2} className="text-gray-600" /></button>
               </div>
 
                         <div className = "w-full flex flex-col border border-gray-100 rounded-xl">

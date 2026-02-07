@@ -431,6 +431,39 @@ export async function cancelUserSubscription(cognitoSub) {
 }
 
 /**
+ * Store Stripe Customer ID on the Cognito user so the link survives email change.
+ * @param {string} cognitoUsername - Cognito pool Username (stable, e.g. UUID when email is alias)
+ * @param {string} stripeCustomerId - Stripe customer id (e.g. cus_xxx)
+ */
+export async function updateStripeCustomerId(cognitoUsername, stripeCustomerId) {
+  const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+
+  if (!USER_POOL_ID) {
+    throw new Error('COGNITO_USER_POOL_ID environment variable is not set');
+  }
+
+  try {
+    const updateCommand = new AdminUpdateUserAttributesCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: cognitoUsername,
+      UserAttributes: [
+        {
+          Name: 'custom:stripe_customer_id',
+          Value: stripeCustomerId,
+        },
+      ],
+    });
+
+    await cognitoClient.send(updateCommand);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating Stripe customer ID in Cognito:', error);
+    throw error;
+  }
+}
+
+/**
  * Get user subscription from Cognito
  * @param {string} email - User email
  * @returns {Promise<Object>} Subscription info
