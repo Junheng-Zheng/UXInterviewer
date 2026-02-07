@@ -32,7 +32,7 @@ const Profile = () => {
       ></button> */}
       {user?.name && (
         <button onClick={() => setIsOpen(!isOpen)} className="text-black/80 cursor-pointer whitespace-nowrap overflow-hidden text-sm  bg-gray-100 rounded-xl  px-4 py-3 flex items-center justify-center gap-2">
-          {user.name}..
+          {user.name}
           <ChevronsUpDown size={16} />
 
         </button>
@@ -60,7 +60,7 @@ const Profile = () => {
         <Listitem href="/settings">
           <Cog size={16} strokeWidth={1.3} />  Settings
         </Listitem>
-        <Listitem  href="/logout">
+<Listitem href="/api/auth/logout">
           <LogOut size={16} strokeWidth={1.3} />           Logout
         </Listitem>
       </div>

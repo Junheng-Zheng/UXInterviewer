@@ -503,6 +503,7 @@ const Interview = () => {
           model: selectedModel,
           completionTimeSeconds: completionTimeSeconds,
           completionTimeMinutes: completionTimeMinutes,
+          timeLimitMinutes: timeValue,
         }),
       });
   

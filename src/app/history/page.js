@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Zap, Calendar, Sparkles, FolderSearch, ClockCheck } from 'lucide-react';
+import { Search, Zap, Calendar, Sparkles, FolderSearch, ClockCheck, SplinePointer, UserSearch, HeartHandshake } from 'lucide-react';
 import { Clock } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Navbar from '../Components/Navbar';
 import Profile from '../Components/Profile';
+import Image from 'next/image';
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -117,6 +118,7 @@ export default function HistoryPage() {
               difficulty: 'Medium', // Default
               date: date,
               time: formatTime(item.completionTimeSeconds),
+              timeLimit: item.timeLimitMinutes ? `${item.timeLimitMinutes}m` : 'N/A',
               submissionId: item.submissionId,
             };
           })
@@ -179,14 +181,14 @@ export default function HistoryPage() {
   };
 
   const getGradeColor = (grade) => {
-    if (grade >= 70) return '#B7ECA2';
-    if (grade >= 50) return '#F5E9CD';
-    return '#FFE1E1';
+    if (grade >= 70) return 'oklch(93.8% 0.127 124.321)';
+    if (grade >= 50) return 'oklch(97.3% 0.071 103.193)';
+    return 'oklch(94.1% 0.03 12.58)';
   };
   const getDifficultyColor = (difficulty) => {
-    if (difficulty === 'Easy') return '#B7ECA2';
-    if (difficulty === 'Medium') return '#F5E9CD';
-        return '#FFE1E1';
+    if (difficulty === 'Easy') return 'oklch(93.8% 0.127 124.321)';
+    if (difficulty === 'Medium') return 'oklch(97.3% 0.071 103.193)';
+        return 'oklch(94.1% 0.03 12.58)';
   };
 
   const Shimmerblock = () => {
@@ -218,7 +220,9 @@ return (
         {/* Top bar */}
         <div className = "flex border-b  z-200 border-gray-200 justify-between w-full items-center p-6">
        <div className = "w-full flex justify-start">
-         <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full"/>
+         <div className="w-11 h-11 opacity-12 rounded-lg overflow-hidden relative">
+            <Image src="/logo.png" alt="logo" fill />
+          </div>
        </div>
           <Navbar activeTab="history" />
         <div className = "w-full flex justify-end">
@@ -237,7 +241,7 @@ return (
               className="flex items-center w-full"
   
             >
-              <div className="bg-white border border-gray-100 flex items-center justify-between px-[16px] py-[12px] rounded-[12px] w-[416px]">
+              <div className="bg-white border border-gray-200 flex items-center justify-between px-[16px] py-[12px] rounded-[12px] w-[420px]">
                 <input
                   type="text"
                   placeholder="Search"
@@ -245,7 +249,7 @@ return (
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="font-normal text-base text-[#2d2d2d] outline-none w-full bg-transparent placeholder:opacity-50"
                 />
-                <FolderSearch size={20} className = "cursor-pointer" strokeWidth={1.3} />
+                <FolderSearch size={20} className = "cursor-pointer" strokeWidth={1.4} />
               </div>
             </div>
 
@@ -258,7 +262,7 @@ return (
             >
 
               {/* Table Header */}
-              <div className="border-b border-gray-200/80 px-[16px] gap-4 text-xl flex items-center py-[16px] w-full">
+              <div className="border-b border-gray-200/80 px-[16px] gap-4 text-lg flex items-center py-[16px] w-full">
                 <div className="flex-1">
                   <p className="font-serif text-black">Interview Question</p>
                 </div>
@@ -374,9 +378,9 @@ return (
                   <div className="flex-1 flex border-r flex-wrap gap-2 border-gray-200/80 p-[16px]">
                     {interview.question.map((line, i) => (
                       <div key={i} className="flex gap-[8px] items-center font-normal px-2 py-2 rounded-xl bg-gray-100  text-sm text-[#2d2d2d]">
-                        {i === 0 && <div className="w-fit self-stretch py-2 p-3 rounded-lg  bg-blue-100">Design</div>}
-                        {i === 1 && <div className="w-fit self-stretch py-2 p-3 rounded-lg  bg-red-100">For</div>}
-                        {i === 2 && <div className="w-fit self-stretch py-2 p-3 rounded-lg  bg-pink-100">To Help</div>}
+                        {i === 0 && <div className="w-fit self-stretch py-2 p-4 rounded-lg  flex items-center gap-1 bg-blue-100"> <SplinePointer size={16} strokeWidth={1.2}  />  Design</div>}
+                        {i === 1 && <div className="w-fit self-stretch py-2 p-4 rounded-lg  flex items-center gap-1 bg-red-100"> <UserSearch size={16} strokeWidth={1.2}  /> For</div>}
+                        {i === 2 && <div className="w-fit self-stretch py-2 p-4 rounded-lg  flex items-center gap-1 bg-pink-100"> <HeartHandshake size={16} strokeWidth={1.2}  /> To Help</div>}
                         {/* <div className={`w-[2px] self-stretch ${i === 0 ? 'bg-blue-100' : 'bg-white'}`} /> */}
                         <p className="capitalize ">{line.toLowerCase()}</p>
                       </div>
@@ -401,7 +405,7 @@ return (
                       {interview.time}
                     </div>
                     <div className="flex-1 flex justify-center text-sm">
-                      0m
+                      {interview.timeLimit}
                     </div>
                   </div>
                 </Link>
