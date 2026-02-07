@@ -44,6 +44,7 @@ export async function GET(request) {
       name: claims.name || claims.email,
       email_verified: claims.email_verified,
       idToken: tokenSet.id_token, // Store ID token for getting AWS credentials
+      accessToken: tokenSet.access_token, // For Cognito attribute verification (email change)
       refreshToken: tokenSet.refresh_token, // Store refresh token for token renewal
     };
 

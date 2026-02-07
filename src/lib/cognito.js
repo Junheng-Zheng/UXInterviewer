@@ -6,6 +6,9 @@ import {
   ResendConfirmationCodeCommand,
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
+  GetUserAttributeVerificationCodeCommand,
+  VerifyUserAttributeCommand,
+  ChangePasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { createHmac, randomUUID } from 'crypto';
 
@@ -227,6 +230,78 @@ export async function resendConfirmationCode(email) {
 }
 
 /**
+ * Send verification code for a user attribute (e.g. email after change).
+ * Requires the user's access token. Code is sent to the current attribute value.
+ * @param {string} accessToken - User's Cognito access token
+ * @param {string} attributeName - Attribute to verify (e.g. 'email')
+ */
+export async function getUserAttributeVerificationCode(accessToken, attributeName) {
+  try {
+    const command = new GetUserAttributeVerificationCodeCommand({
+      AccessToken: accessToken,
+      AttributeName: attributeName,
+    });
+    await cognitoClient.send(command);
+    return { success: true };
+  } catch (error) {
+    console.error('GetUserAttributeVerificationCode error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify a user attribute with the code sent to the new value.
+ * @param {string} accessToken - User's Cognito access token
+ * @param {string} attributeName - Attribute to verify (e.g. 'email')
+ * @param {string} code - 6-digit verification code
+ */
+export async function verifyUserAttribute(accessToken, attributeName, code) {
+  try {
+    const command = new VerifyUserAttributeCommand({
+      AccessToken: accessToken,
+      AttributeName: attributeName,
+      Code: code,
+    });
+    await cognitoClient.send(command);
+    return { success: true };
+  } catch (error) {
+    console.error('VerifyUserAttribute error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Change authenticated user's password.
+ * @param {string} accessToken - User's Cognito access token
+ * @param {string} previousPassword - Current password
+ * @param {string} proposedPassword - New password
+ */
+export async function changePassword(accessToken, previousPassword, proposedPassword) {
+  try {
+    const command = new ChangePasswordCommand({
+      AccessToken: accessToken,
+      PreviousPassword: previousPassword,
+      ProposedPassword: proposedPassword,
+    });
+    await cognitoClient.send(command);
+    return { success: true };
+  } catch (error) {
+    if (error.name === 'NotAuthorizedException') {
+      const err = new Error('Current password is incorrect');
+      err.name = error.name;
+      throw err;
+    }
+    if (error.name === 'InvalidPasswordException') {
+      const err = new Error(error.message || 'New password does not meet requirements');
+      err.name = error.name;
+      throw err;
+    }
+    console.error('ChangePassword error:', error);
+    throw error;
+  }
+}
+
+/**
  * Decode JWT token to get user info
  */
 export function decodeToken(token) {
@@ -351,6 +426,39 @@ export async function cancelUserSubscription(cognitoSub) {
     return { success: true };
   } catch (error) {
     console.error('Error cancelling user subscription:', error);
+    throw error;
+  }
+}
+
+/**
+ * Store Stripe Customer ID on the Cognito user so the link survives email change.
+ * @param {string} cognitoUsername - Cognito pool Username (stable, e.g. UUID when email is alias)
+ * @param {string} stripeCustomerId - Stripe customer id (e.g. cus_xxx)
+ */
+export async function updateStripeCustomerId(cognitoUsername, stripeCustomerId) {
+  const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+
+  if (!USER_POOL_ID) {
+    throw new Error('COGNITO_USER_POOL_ID environment variable is not set');
+  }
+
+  try {
+    const updateCommand = new AdminUpdateUserAttributesCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: cognitoUsername,
+      UserAttributes: [
+        {
+          Name: 'custom:stripe_customer_id',
+          Value: stripeCustomerId,
+        },
+      ],
+    });
+
+    await cognitoClient.send(updateCommand);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating Stripe customer ID in Cognito:', error);
     throw error;
   }
 }

@@ -30,6 +30,7 @@ export async function getAWSCredentialsWithRefresh() {
         updatedSession = {
           ...session,
           idToken: refreshed.idToken,
+          accessToken: refreshed.accessToken ?? session.accessToken,
           refreshToken: refreshed.refreshToken || session.refreshToken, // Keep refresh token updated
         };
         
@@ -59,5 +60,54 @@ export async function getAWSCredentialsWithRefresh() {
     credentials,
     session: updatedSession,
   };
+}
+
+/**
+ * Get a valid access token for Cognito user APIs (e.g. attribute verification).
+ * Refreshes and persists session if idToken/accessToken expired.
+ * @returns {Promise<{accessToken: string}>}
+ */
+export async function getAccessTokenWithRefresh() {
+  const session = await getSession();
+
+  if (!session || !session.idToken) {
+    throw new Error('Not authenticated');
+  }
+
+  let accessToken = session.accessToken;
+  let updatedSession = session;
+
+  if (isTokenExpired(session.idToken) && session.refreshToken) {
+    const refreshed = await refreshIdToken(session.refreshToken);
+    if (refreshed?.idToken) {
+      accessToken = refreshed.accessToken;
+      updatedSession = {
+        ...session,
+        idToken: refreshed.idToken,
+        accessToken: refreshed.accessToken ?? session.accessToken,
+        refreshToken: refreshed.refreshToken || session.refreshToken,
+      };
+      await setSession(updatedSession);
+    }
+  } else if (!accessToken && session.refreshToken) {
+    // Session has no accessToken (e.g. old session); refresh to get it
+    const refreshed = await refreshIdToken(session.refreshToken);
+    if (refreshed?.accessToken) {
+      accessToken = refreshed.accessToken;
+      updatedSession = {
+        ...session,
+        idToken: refreshed.idToken ?? session.idToken,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken || session.refreshToken,
+      };
+      await setSession(updatedSession);
+    }
+  }
+
+  if (!accessToken) {
+    throw new Error('Not authenticated');
+  }
+
+  return { accessToken };
 }
 
