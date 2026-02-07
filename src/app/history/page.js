@@ -6,7 +6,7 @@ import { Clock } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Navbar from '../Components/Navbar';
-
+import Profile from '../Components/Profile';
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -216,10 +216,14 @@ return (
         <div className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none" style={{ backgroundSize: '16px 16px' }}/>
       
         {/* Top bar */}
-        <div className="flex border-b z-20 border-gray-200/80 justify-between items-center p-6">
-          <div className="w-[56px] h-[56px] bg-gray-200 rounded-full" />
+        <div className = "flex border-b  z-200 border-gray-200 justify-between w-full items-center p-6">
+       <div className = "w-full flex justify-start">
+         <div className = "w-[56px] h-[56px] relative bg-gray-200 rounded-full"/>
+       </div>
           <Navbar activeTab="history" />
-          <div className="w-[56px] h-[56px] bg-gray-200 rounded-full" />
+        <div className = "w-full flex justify-end">
+          <Profile />
+          </div>
         </div>
 
         {/* Inner vertical rails */}
