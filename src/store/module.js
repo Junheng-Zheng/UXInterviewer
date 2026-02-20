@@ -8,6 +8,7 @@ const initialState = {
   selectedModel: "gpt-4o-mini",
   evaluation: null,
   screenshot: null,
+  conversationHistory: [],
 };
 
 const useStore = create((set) => ({
@@ -19,6 +20,7 @@ const useStore = create((set) => ({
   setSelectedModel: (selectedModel) => set((state) => ({ selectedModel })),
   setEvaluation: (evaluation) => set((state) => ({ evaluation })),
   setScreenshot: (screenshot) => set((state) => ({ screenshot })),
+  setConversationHistory: (conversationHistory) => set((state) => ({ conversationHistory })),
 }));
 
 export default useStore;

@@ -351,15 +351,6 @@ const Grade = () => {
       </div>
         )}
 
-        {/* JSON Output Display (for debugging) */}
-        {evaluation && !evaluation.rawResponse && (
-          <div className="w-full mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
-            <h3 className="text-lg font-serif mb-2">Evaluation JSON Output</h3>
-            <p className="text-sm font-mono text-black whitespace-pre-wrap break-all overflow-auto max-h-64">
-              {JSON.stringify(evaluation, null, 2)}
-            </p>
-      </div>
-        )}
 
         {/* Only show category sections if not raw response */}
         {!isRawResponse && (

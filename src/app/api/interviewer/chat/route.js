@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { google } from "@ai-sdk/google";
+import { generateText } from "ai";
+import { Laminar, observe, getTracer } from "@lmnr-ai/lmnr";
 
-// Get interviewer system prompt from environment variable
-const INTERVIEWER_SYSTEM_PROMPT = process.env.INTERVIEWER_SYSTEM_PROMPT || 
+const INTERVIEWER_SYSTEM_PROMPT = process.env.INTERVIEWER_SYSTEM_PROMPT ||
 
 
 `# UXInterviewer AI - Interviewer Mode
@@ -15,8 +17,8 @@ You are a professional UX interviewer conducting a timed whiteboard challenge. K
 - **Never use follow-up questions** like "Would you like to know more?"
 - **Be direct and factual** - no filler phrases
 - **Stay consistent** - if asked the same thing twice, give the same answer
-- **Create a narrative** - At the start of an interview, create a backend narrative of the challenge format. Remember this in system. This should ba whole requirements list, such as 
-target audience demographic, painpoints, behavior, statstics, etc. Be specific and detailed, because you will use this narrative to answer any questions. When I ask you to "give entire narrative", give me this narrative. Anything 
+- **Create a narrative** - At the start of an interview, create a backend narrative of the challenge format. Remember this in system. This should ba whole requirements list, such as
+target audience demographic, painpoints, behavior, statstics, etc. Be specific and detailed, because you will use this narrative to answer any questions. When I ask you to "give entire narrative", give me this narrative. Anything
 that is not in this narrative you can say something like the candidate has not yet provided that information.
 
 ## The Challenge Format
@@ -31,7 +33,7 @@ Time limit: 15-30 minutes
 ### Answering Their Questions
 Answering their question is always subjective and needs to align with the process of discovery, defining, developing, and delievering.
 Look at their current whiteboard progress, and determine what they are trying to achieve. Answer their questions with statistics and specific examples based on transcript
-history, or sometimes ask a rebuttal question when you see fit. 
+history, or sometimes ask a rebuttal question when you see fit.
 Give **one direct fact with numbers** when possible:
 
 **Demographics/Users:**
@@ -67,7 +69,7 @@ Pick **one short question**:
 - "Walk me through this."
 
 ### If They're Stuck
-Say " you are now stuck" Refer to whiteboard awareness section below. Based on their phase, ask a question that is relvant to the phase that can help them progress or improve their design process. 
+Say " you are now stuck" Refer to whiteboard awareness section below. Based on their phase, ask a question that is relvant to the phase that can help them progress or improve their design process.
 
 ### Time Management
 "[X] minutes left."
@@ -113,11 +115,11 @@ You can see the current state of the candidate's whiteboard. When they ask "what
 - Drawings and sketches
 - Layout and structure
 
-First, answer this. Where are they in the design process? 
+First, answer this. Where are they in the design process?
 
 If they are in discovery, say they are in the discovery phase. They should have text elements, getting a sense of the problem and getting context on the situation.
 
-If they are in defining, say there are in the defining phase. They should have clear context ready, such as painpoints, behaviors, paintpoints, etc. 
+If they are in defining, say there are in the defining phase. They should have clear context ready, such as painpoints, behaviors, paintpoints, etc.
 
 If they are in developing, say they are in the developing phase. They should have a clear design ready, such as a flowchart, wireframe, or mockup.
 
@@ -133,14 +135,13 @@ Do they understand the root cause of the problem? Yes or No
 
 `;
 
-// Helper function to extract text and describe whiteboard content
 function describeWhiteboard(whiteboard) {
   if (!whiteboard || !whiteboard.elements || !Array.isArray(whiteboard.elements)) {
     return "The whiteboard is currently empty.";
   }
 
   const elements = whiteboard.elements.filter(el => !el.isDeleted);
-  
+
   if (elements.length === 0) {
     return "The whiteboard is currently empty.";
   }
@@ -153,13 +154,11 @@ function describeWhiteboard(whiteboard) {
 
   const descriptions = [];
 
-  // Extract all text
   if (textElements.length > 0) {
     const texts = textElements.map(el => el.text).filter(Boolean);
     descriptions.push(`Text on board: ${texts.join(', ')}`);
   }
 
-  // Count shapes
   if (shapes.length > 0) {
     const shapeCounts = {};
     shapes.forEach(shape => {
@@ -171,22 +170,19 @@ function describeWhiteboard(whiteboard) {
     descriptions.push(shapeDesc);
   }
 
-  // Count arrows
   if (arrows.length > 0) {
     descriptions.push(`${arrows.length} arrow${arrows.length > 1 ? 's' : ''}`);
   }
 
-  // Count lines
   if (lines.length > 0) {
     descriptions.push(`${lines.length} line${lines.length > 1 ? 's' : ''}`);
   }
 
-  // Count drawings
   if (drawings.length > 0) {
     descriptions.push(`${drawings.length} drawing${drawings.length > 1 ? 's' : ''} or sketch${drawings.length > 1 ? 'es' : ''}`);
   }
 
-  return descriptions.length > 0 
+  return descriptions.length > 0
     ? `Current whiteboard content: ${descriptions.join('; ')}.`
     : "The whiteboard has some elements but they are not easily describable.";
 }
@@ -196,12 +192,10 @@ export async function POST(request) {
     const body = await request.json();
     const { transcript, conversationHistory = [], design, target, tohelp, whiteboard } = body;
 
-    // Validate required fields
-    // Allow empty transcript/history for initial greeting when design/target/tohelp are provided
-    const isInitialGreeting = (!transcript || transcript.trim() === '') && 
-                               (!conversationHistory || conversationHistory.length === 0) && 
+    const isInitialGreeting = (!transcript || transcript.trim() === '') &&
+                               (!conversationHistory || conversationHistory.length === 0) &&
                                design && target && tohelp;
-    
+
     if (!transcript && (!conversationHistory || conversationHistory.length === 0) && !isInitialGreeting) {
       return NextResponse.json(
         { error: "Missing required field: transcript or conversationHistory" },
@@ -209,158 +203,56 @@ export async function POST(request) {
       );
     }
 
-    // Check if OpenAI API key is configured
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "OpenAI API key not configured",
-          message: "Please set OPENAI_API_KEY in your environment variables.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Extract whiteboard description
     const whiteboardDescription = whiteboard ? describeWhiteboard(whiteboard) : null;
-    
-    // Debug logging
-    if (whiteboard) {
-      console.log('Whiteboard data received:', {
-        hasElements: whiteboard.elements?.length > 0,
-        elementCount: whiteboard.elements?.length || 0,
-        description: whiteboardDescription
-      });
-    }
 
-    // Build conversation messages
-    const systemContent = INTERVIEWER_SYSTEM_PROMPT + 
-      (design && target && tohelp 
+    const systemContent = INTERVIEWER_SYSTEM_PROMPT +
+      (design && target && tohelp
         ? `\n\nContext: The candidate is designing ${design} for ${target} to help ${tohelp}.`
         : "") +
-      (whiteboardDescription 
+      (whiteboardDescription
         ? `\n\n${whiteboardDescription}`
         : "");
 
-    const messages = [
-      {
-        role: "system",
-        content: systemContent,
-      },
-    ];
+    const messages = [];
 
-    // Add conversation history
     if (conversationHistory && conversationHistory.length > 0) {
       messages.push(...conversationHistory);
     }
 
-    // Add current user transcript (if provided)
-    // If no transcript and no history, generate an initial greeting
     if (transcript && transcript.trim().length > 0) {
-      messages.push({
-        role: "user",
-        content: transcript.trim(),
-      });
-    } else if (messages.length === 1 && design && target && tohelp) {
-      // Initial greeting scenario - add a system message to prompt the greeting
-      messages.push({
-        role: "user",
-        content: "Please introduce yourself and ask the first question to begin the interview.",
-      });
+      messages.push({ role: "user", content: transcript.trim() });
+    } else if (messages.length === 0 && design && target && tohelp) {
+      messages.push({ role: "user", content: "Please introduce yourself and ask the first question to begin the interview." });
     }
 
-    // Prepare request payload
-    const requestPayload = {
-      model: "gpt-4o-mini", // Using faster model for real-time conversation
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 200, // Keep responses concise for TTS
-    };
-
-    // Call OpenAI API with retry logic for rate limits
-    let response;
-    let retries = 0;
-    const maxRetries = 3;
-
-    while (retries <= maxRetries) {
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+    const { text } = await observe({ name: 'interviewer-chat' }, async () => {
+      Laminar.setTraceMetadata({ type: 'chat' });
+      return generateText({
+        model: google("gemini-2.5-flash", { thinkingConfig: { thinkingBudget: 0 } }),
+        system: systemContent,
+        messages,
+        temperature: 0.7,
+        maxTokens: 200,
+        experimental_telemetry: {
+          isEnabled: true,
+          tracer: getTracer(),
         },
-        body: JSON.stringify(requestPayload),
       });
-
-      // If not rate limited, break out of retry loop
-      if (response.status !== 429 || retries >= maxRetries) {
-        break;
-      }
-
-      // Wait before retrying (exponential backoff)
-      const retryAfter = response.headers.get("retry-after");
-      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retries) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-      retries++;
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-
-      // Handle rate limiting specifically
-      if (response.status === 429) {
-        const retryAfter = response.headers.get("retry-after");
-        return NextResponse.json(
-          {
-            error: "Rate limit exceeded",
-            message: retryAfter
-              ? `Too many requests. Please try again in ${retryAfter} seconds.`
-              : "Too many requests. Please try again in a few moments.",
-            retryAfter: retryAfter ? parseInt(retryAfter) : null,
-          },
-          { status: 429 }
-        );
-      }
-
-      // Handle other OpenAI API errors
-      return NextResponse.json(
-        {
-          error: "Failed to generate response",
-          message: errorData.error?.message || "An error occurred while generating the interviewer response.",
-          details: errorData,
-        },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      console.error("No content received from OpenAI. Full response:", JSON.stringify(data, null, 2));
-      return NextResponse.json(
-        { error: "No content received from OpenAI", details: "The API response did not contain any content." },
-        { status: 500 }
-      );
-    }
+    });
 
     return NextResponse.json({
       success: true,
-      response: content.trim(),
+      response: text,
       message: {
         role: "assistant",
-        content: content.trim(),
+        content: text,
       },
     });
   } catch (error) {
     console.error("Error in interviewer chat endpoint:", error);
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: error.message || "An unexpected error occurred.",
-      },
+      { error: "Internal server error", message: error.message || "An unexpected error occurred." },
       { status: 500 }
     );
   }
 }
-

@@ -34,6 +34,7 @@ export default function WhiteboardPage() {
   const setTohelp = useStore((state) => state.setTohelp);
   const setSelectedModel = useStore((state) => state.setSelectedModel);
   const setScreenshot = useStore((state) => state.setScreenshot);
+  const setStoreConversationHistory = useStore((state) => state.setConversationHistory);
   
   // Get time from URL params, default to 1800 seconds (30 minutes)
   const initialTime = parseInt(searchParams.get('time') || '1800', 10);
@@ -1410,8 +1411,8 @@ export default function WhiteboardPage() {
 
       console.log("Evaluation received from API:", evaluation);
       setEvaluation(evaluation);
-      // Store the screenshot for display on results page
       setScreenshot(screenshotBase64);
+      setStoreConversationHistory(conversationHistory);
       console.log("Screenshot stored:", screenshotBase64 ? `${screenshotBase64.substring(0, 50)}...` : "null");
       console.log("Evaluation complete - grading page will automatically update");
     } catch (error) {

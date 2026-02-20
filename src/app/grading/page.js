@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {  CheckIcon, PencilIcon, SearchIcon, Square, SquareMinus, CodeIcon, SparklesIcon, SquareCheck, ArrowUpRightIcon, Paperclip, CheckCircle2, Target, FileText, Calculator, Hash, X} from "lucide-react";
 import { motion } from "framer-motion";
 import useStore from '../../store/module';
@@ -247,11 +248,14 @@ const formatAIExplanation = (criteria) => {
 };
 
 const GradeTest = () => {
+  const router = useRouter();
   const evaluation = useStore((state) => state.evaluation);
   const design = useStore((state) => state.design);
   const target = useStore((state) => state.target);
   const tohelp = useStore((state) => state.tohelp);
   const time = useStore((state) => state.time);
+  const screenshot = useStore((state) => state.screenshot);
+  const conversationHistory = useStore((state) => state.conversationHistory);
   
   // Real loading state - derived from evaluation data (ready to be connected to actual API later)
   const isLoading = !evaluation;
@@ -280,6 +284,7 @@ const GradeTest = () => {
   
   const overallGrade = getOverallGrade();
   const [showHowToGrade, setShowHowToGrade] = useState(false);
+  const [showSubmission, setShowSubmission] = useState(false);
   return (
     isLoading ? (
     <div className="h-dvh w-full flex flex-col  gap-2 text-sm items-center justify-center">
@@ -415,17 +420,6 @@ const GradeTest = () => {
         
       </div>
       </div>
-      {/* JSON Output Section */}
-      {hasParsedData && parsed && (
-        <div className = "px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h3 className = "text-base font-medium mb-2">JSON Output</h3>
-          <div className = "bg-white p-4 rounded border border-gray-200">
-            <pre className = "text-sm text-gray-800 whitespace-pre-wrap wrap-break-word overflow-auto max-h-96 font-sans">
-              {JSON.stringify(parsed, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
 
       {/* Raw Output Section - only show if parsing failed or for debugging */}
       {evaluation?.rawResponse && (evaluation?.parseError || !hasParsedData) && (
@@ -444,16 +438,51 @@ const GradeTest = () => {
         </div>
       )}
 
-         <div className = "px-6 py-3 border-b border-gray-200 flex items-center justify-between">
-        <div className = "flex items-center gap-3">
-            {/* <Image src = "/logo.png" alt = "logo" width = {40} height = {40} className = "hidden md:block" /> */}
-              <p className = "flex items-center py-2 px-3 rounded-sm bg-gray-100">Back Home</p>
+      {/* View Submission Modal */}
+      <div className={`fixed inset-0 z-[999] flex items-center justify-center ${showSubmission ? 'opacity-100' : 'opacity-0 pointer-events-none'} transition-opacity duration-300`}>
+        <button className="absolute inset-0 bg-black/40" onClick={() => setShowSubmission(false)} />
+        <div className={`relative z-10 w-[80vw] h-[80vh] bg-white rounded-lg flex flex-col overflow-hidden shadow-xl ${showSubmission ? 'scale-100' : 'scale-95'} transition-transform duration-300`}>
+          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
+            <p className="font-medium">Submission</p>
+            <button onClick={() => setShowSubmission(false)}><X size={18} /></button>
+          </div>
+          <div className="flex flex-1 overflow-hidden">
+            {/* Screenshot */}
+            <div className="flex-1 border-r border-gray-200 overflow-auto bg-gray-50 flex items-center justify-center p-4">
+              {screenshot ? (
+                <img src={`data:image/png;base64,${screenshot}`} alt="Whiteboard submission" className="max-w-full max-h-full object-contain rounded" />
+              ) : (
+                <p className="text-gray-400 text-sm">No screenshot available</p>
+              )}
+            </div>
+            {/* Chat history */}
+            <div className="w-[320px] flex flex-col overflow-hidden">
+              <p className="px-4 py-3 text-xs text-gray-500 border-b border-gray-200">Chat Transcript</p>
+              <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+                {conversationHistory.length > 0 ? conversationHistory.map((msg, i) => (
+                  <div key={i} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <p className="text-xs text-gray-400">{msg.role === 'user' ? 'You' : 'Interviewer'}</p>
+                    <div className={`px-3 py-2 rounded-lg text-sm max-w-[260px] ${msg.role === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-gray-800 text-white'}`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-400 text-sm">No chat history available</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-                <div className = "flex items-center gap-3">
-            <p className = "flex items-center py-2 px-3 rounded-sm bg-gray-100">View Submission</p>
-        <p className = "flex items-center py-2 px-3 rounded-sm bg-gray-100">Try Again</p>
-        </div>
+      </div>
 
+      <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/')} className="flex items-center py-2 px-3 rounded-sm bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">Back Home</button>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowSubmission(true)} className="flex items-center py-2 px-3 rounded-sm bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">View Submission</button>
+          <button onClick={() => router.push('/whiteboard')} className="flex items-center py-2 px-3 rounded-sm bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">Try Again</button>
+        </div>
       </div>
       {/* <div className = "w-full border-  bg-white/20 backdrop-blur-sm flex items-center  border-gray-200 text-xl font-medium justify-between">
             <p className = "px-6 py-3 ">Total Assessment Score</p>
