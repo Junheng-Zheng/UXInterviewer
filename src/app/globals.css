@@ -105,6 +105,99 @@ body {
   box-shadow: none !important;
 }
 
+/* Override Excalidraw selection/bounding box color to light blue */
+.excalidraw svg[data-element-selected] path,
+.excalidraw svg[data-element-selected] rect,
+.excalidraw svg[data-element-selected] circle,
+.excalidraw svg[data-element-selected] line,
+.excalidraw .element-selected path,
+.excalidraw .element-selected rect,
+.excalidraw .element-selected circle,
+.excalidraw .element-selected line,
+.excalidraw .element-bounds path,
+.excalidraw .element-bounds rect,
+.excalidraw .element-bounds circle,
+.excalidraw .element-bounds line,
+.excalidraw .element-bounds-handles path,
+.excalidraw .element-bounds-handles rect,
+.excalidraw .element-bounds-handles circle,
+.excalidraw .element-bounds-handles line,
+.excalidraw .element-bounds-handles-handle path,
+.excalidraw .element-bounds-handles-handle rect,
+.excalidraw .element-bounds-handles-handle circle,
+.excalidraw .element-bounds-handles-handle line {
+  stroke: #60a5fa !important;
+  fill: #60a5fa !important;
+}
+
+/* Override selected element stroke - target all SVG shapes when parent is selected */
+.excalidraw svg g[data-selected="true"] > path,
+.excalidraw svg g[data-selected="true"] > rect,
+.excalidraw svg g[data-selected="true"] > circle,
+.excalidraw svg g[data-selected="true"] > line,
+.excalidraw svg g[data-selected="true"] > ellipse,
+.excalidraw svg g[data-selected="true"] > polygon,
+.excalidraw svg g[data-selected="true"] > polyline,
+.excalidraw svg g[data-selected="true"] path,
+.excalidraw svg g[data-selected="true"] rect,
+.excalidraw svg g[data-selected="true"] circle,
+.excalidraw svg g[data-selected="true"] line,
+.excalidraw svg g[data-selected="true"] ellipse,
+.excalidraw svg g[data-selected="true"] polygon,
+.excalidraw svg g[data-selected="true"] polyline {
+  stroke: #60a5fa !important;
+}
+
+/* Override selected element stroke color - target all possible selectors */
+.excalidraw svg g[data-selected="true"] path,
+.excalidraw svg g[data-selected="true"] rect,
+.excalidraw svg g[data-selected="true"] circle,
+.excalidraw svg g[data-selected="true"] line,
+.excalidraw svg g[data-selected="true"] ellipse,
+.excalidraw svg g[data-selected="true"] polygon,
+.excalidraw svg g[data-selected="true"] polyline,
+.excalidraw svg g[data-selected="true"] g path,
+.excalidraw svg g[data-selected="true"] g rect,
+.excalidraw svg g[data-selected="true"] g circle,
+.excalidraw svg g[data-selected="true"] g line,
+.excalidraw svg g[data-selected="true"] g ellipse,
+.excalidraw svg g[data-selected="true"] g polygon,
+.excalidraw svg g[data-selected="true"] g polyline,
+.excalidraw svg[data-selected="true"] path,
+.excalidraw svg[data-selected="true"] rect,
+.excalidraw svg[data-selected="true"] circle,
+.excalidraw svg[data-selected="true"] line,
+.excalidraw svg[data-selected="true"] ellipse,
+.excalidraw svg[data-selected="true"] polygon,
+.excalidraw svg[data-selected="true"] polyline {
+  stroke: #60a5fa !important;
+}
+
+/* Target elements with selected class or attribute */
+.excalidraw [data-selected="true"] path,
+.excalidraw [data-selected="true"] rect,
+.excalidraw [data-selected="true"] circle,
+.excalidraw [data-selected="true"] line,
+.excalidraw [data-selected="true"] ellipse,
+.excalidraw [data-selected="true"] polygon,
+.excalidraw [data-selected="true"] polyline,
+.excalidraw [class*="selected"] path,
+.excalidraw [class*="selected"] rect,
+.excalidraw [class*="selected"] circle,
+.excalidraw [class*="selected"] line,
+.excalidraw [class*="selected"] ellipse,
+.excalidraw [class*="selected"] polygon,
+.excalidraw [class*="selected"] polyline,
+.excalidraw [class*="Selected"] path,
+.excalidraw [class*="Selected"] rect,
+.excalidraw [class*="Selected"] circle,
+.excalidraw [class*="Selected"] line,
+.excalidraw [class*="Selected"] ellipse,
+.excalidraw [class*="Selected"] polygon,
+.excalidraw [class*="Selected"] polyline {
+  stroke: #60a5fa !important;
+}
+
 .font-space-mono {
   font-family: var(--font-space-mono);
 }
@@ -204,7 +297,7 @@ body {
   --space-factor: 0.25rem;
   --text-primary-color: var(--color-on-surface);
 
-  --color-selection: #3168f5;
+  --color-selection: #60a5fa;
 
   --color-icon-white: #fff;
 
@@ -346,7 +439,7 @@ body {
 
   --color-slider-track: hsl(220, 50%, 39%);
 
-  --color-selection: #2555d9;
+  --color-selection: #93c5fd;
 
   --color-icon-white: var(--color-gray-90);
 
@@ -416,3 +509,5 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+

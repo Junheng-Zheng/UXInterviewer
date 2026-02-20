@@ -125,21 +125,21 @@ const Landingpage = () => {
       subTitle: "Generate from 0–1",
       title: "Start a real, live technical interview",
       description:
-        "Other products require you to choose from a list of questions. We allow you to generate a question based on your own context.",
+        "Choose from a list of our curated questions. Just change the difficult, the time limit, and the context, and start the interview.",
     },
     {
       id: "prep",
       subTitle: "From 1 to 100",
       title: "Draw, think, speak, and ask",
       description:
-        "We use AI to generate a question based on your own context. You can then use the question to prepare for your interview.",
+        "Upon starting the interview, you get brought into a whiteboard session. Here, you walk through your solution, speaking and asking questions just like a real interview.",
     },
     {
       id: "verbalize",
       subTitle: "From 100 to Infinity",
       title: "Structured feedback - Verbalized",
       description:
-        "We use AI to generate a question based on your own context. You can then use the question to prepare for your interview.",
+        "Upon submission, you get structured feedback on your performance. We use a strict rubric to grade your performace, offering feedback on your all skills and areas for improvement.",
     },
   ];
 
@@ -279,9 +279,7 @@ const Landingpage = () => {
             }}
             className=" text-gray-600 lg:text-center"
           >
-            Instantly generate a question and jump into a real-time,
-            speech-driven whiteboard interview. Track your progress and get
-            feedback on your performance.
+          Choose your question, difficult, and time limit. Speak to an interviewer in a live-whiteboard session, and get feedback on your performance.
           </motion.p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -429,8 +427,14 @@ const Landingpage = () => {
                   transformStyle: "preserve-3d",
                 }}
               >
-                <div className = "w-full aspect-video border border-gray-200 overflow-hidden bg-gray-200 rounded-lg relative">
-                  <Image src="/whiteboardtest.png" alt="main image" fill className="object-cover object-top" />
+                <div className = "w-full  bg-gray-200 rounded-lg">
+                  <video 
+                  className = "w-full  bg-gray-200 rounded-lg"
+                  src="/landingpage/whiteboardexample.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
                 </div>
               </motion.div>
             </div>
@@ -486,7 +490,15 @@ const Landingpage = () => {
         </p>
         <h2 className=" text-3xl font-serif font-normal ">{FEATURES[0].title}</h2>
         <p className="  ">{FEATURES[0].description}</p>
-        <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
+        <div className = "w-full aspect-video bg-gray-200 rounded-lg">
+                    <video 
+                  className = "w-full h-full bg-gray-200 rounded-lg"
+                  src="/landingpage/promptselect.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
+        </div>
       </div>
       <div className="w-full lg:hidden px-5 py-16 border-b border-gray-200   justify-center    flex flex-col gap-4">
         <p className=" text-sm  bg-pink-100 w-fit px-4 py-3 flex items-center gap-2 rounded-xl ">
@@ -494,7 +506,16 @@ const Landingpage = () => {
         </p>
         <h2 className=" text-3xl font-serif font-normal ">{FEATURES[1].title}</h2>
         <p className="  ">{FEATURES[0].description}</p>
-        <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
+        <div className = "w-full aspect-video bg-gray-200 rounded-lg">
+                    <video 
+                  className = "w-full h-full bg-gray-200 rounded-lg"
+                  src="/landingpage/whiteboardexample.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
+
+        </div>
       </div>
       <div className="w-full lg:hidden px-5 py-16     justify-center    flex flex-col gap-4">
         <p className=" text-sm  bg-red-100 w-fit px-4 py-3 flex items-center gap-2 rounded-xl ">
@@ -503,7 +524,15 @@ const Landingpage = () => {
         <h2 className=" text-3xl font-serif font-normal ">{FEATURES[2].title}</h2>
         <p className="  ">{FEATURES[0].description}</p>
         <div className="perspective-[1000px]">
-         <div className = "w-full aspect-video bg-gray-200 rounded-lg"></div>
+         <div className = "w-full aspect-video bg-gray-200 rounded-lg">
+          <video 
+                  className = "w-full h-full bg-gray-200 rounded-lg"
+                  src="/video.mp4"
+                  autoPlay
+                  muted
+                  loop
+                  />
+         </div>
         </div>
       </div>
       {/* Details section */}
@@ -704,4 +733,11 @@ const Landingpage = () => {
     </div>
   );
 };
+
+
+
+
+
+
+
 

@@ -1,408 +1,382 @@
 'use client';
-import { House, Redo2, Edit, Eye, Sparkles, Clock, Calendar, Zap, PenTool, MessageSquareText, SplinePointer, BadgeQuestionMark } from 'lucide-react';
-import { motion } from 'framer-motion';
-import Image from 'next/image';
+import { useState } from 'react';
+import { House, Redo2, Eye, ChevronUp, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
+import useStore from '../../store/module';
+
 const Grade = () => {
+  // State to track which section is open (default to 'Technical')
+  const [openSection, setOpenSection] = useState('Technical');
+  // Get evaluation data from zustand store
+  const evaluation = useStore((state) => state.evaluation);
+  const design = useStore((state) => state.design);
+  const target = useStore((state) => state.target);
+  const tohelp = useStore((state) => state.tohelp);
+  const screenshot = useStore((state) => state.screenshot);
 
+  // Helper function to get score percentage
+  const getScorePercentage = (score) => {
+    if (typeof score === 'number') return score;
+    return 0;
+  };
+
+  // Helper function to get grade letter from score
+  const getGradeLetter = (score) => {
+    const num = getScorePercentage(score);
+    if (num >= 90) return 'A';
+    if (num >= 80) return 'B';
+    if (num >= 70) return 'C';
+    if (num >= 60) return 'D';
+    return 'F';
+  };
+
+  // Helper function to get score level text
+  const getScoreLevel = (score) => {
+    const num = getScorePercentage(score);
+    if (num >= 90) return 'Excellent';
+    if (num >= 75) return 'Good';
+    if (num >= 60) return 'Fair';
+    return 'Needs Improvement';
+  };
+
+  // Check if this is a raw response (testing mode)
+  const isRawResponse = evaluation?.rawResponse !== undefined;
+
+  // Extract scores with fallbacks for both old and new formats (only if not raw response)
+  const overallScore = isRawResponse ? 0 : (evaluation?.overall_score ?? 
+    Math.round((
+      (evaluation?.thinking_score ?? evaluation?.diagram_overall_score ?? 0) +
+      (evaluation?.solution_score ?? evaluation?.technical_overall_score ?? 0) +
+      (evaluation?.communication_score ?? evaluation?.transcript_overall_score ?? 0)
+    ) / 3));
+
+  const technicalScore = isRawResponse ? 0 : (evaluation?.solution_score ?? evaluation?.technical_overall_score ?? 0);
+  const diagrammingScore = isRawResponse ? 0 : (evaluation?.thinking_score ?? evaluation?.diagram_overall_score ?? 0);
+  const communicationScore = isRawResponse ? 0 : (evaluation?.communication_score ?? evaluation?.transcript_overall_score ?? 0);
+
+  // Extract criteria - support both new and old formats
+  const criteriaObj = evaluation?.criteria;
+  let technicalCriteria = [];
+  let diagrammingCriteria = [];
+  let communicationCriteria = [];
+
+  if (criteriaObj && typeof criteriaObj === 'object' && !Array.isArray(criteriaObj)) {
+    // New format: criteria is an object with nested arrays
+    technicalCriteria = criteriaObj.solution || criteriaObj.technical || [];
+    diagrammingCriteria = criteriaObj.thinking || criteriaObj.diagramming || [];
+    communicationCriteria = criteriaObj.communication || criteriaObj.linguistic || [];
+  } else if (Array.isArray(criteriaObj)) {
+    // Legacy format: criteria is a flat array - try to categorize by name
+    technicalCriteria = criteriaObj.filter(c => 
+      c.name?.toLowerCase().includes('logical') || 
+      c.name?.toLowerCase().includes('constraint') || 
+      c.name?.toLowerCase().includes('decision') ||
+      c.name?.toLowerCase().includes('technical')
+    );
+    diagrammingCriteria = criteriaObj.filter(c => 
+      c.name?.toLowerCase().includes('prompt') || 
+      c.name?.toLowerCase().includes('visual') || 
+      c.name?.toLowerCase().includes('hierarchy') ||
+      c.name?.toLowerCase().includes('layout') ||
+      c.name?.toLowerCase().includes('diagram')
+    );
+    communicationCriteria = criteriaObj.filter(c => 
+      c.name?.toLowerCase().includes('question') || 
+      c.name?.toLowerCase().includes('responsive') || 
+      c.name?.toLowerCase().includes('clarification') ||
+      c.name?.toLowerCase().includes('communication')
+    );
+  }
+
+  // Extract summary/feedback - try multiple sources
+  const summary = evaluation?.summary || {};
+  
+  // Helper to format feedback text (preserve line breaks, handle multiple paragraphs)
+  const formatFeedback = (text) => {
+    if (!text) return '';
+    // If it's an array, join with line breaks
+    if (Array.isArray(text)) {
+      return text.join('\n\n');
+    }
+    // If it's a string, preserve line breaks
+    return String(text);
+  };
+
+  // Extract technical feedback (try multiple field names)
+  const technicalFeedback = formatFeedback(
+    summary.solution || 
+    summary.technical || 
+    summary.thinking ||
+    evaluation?.technical_feedback ||
+    evaluation?.solution_feedback ||
+    ''
+  );
+
+  // Extract diagramming feedback
+  const diagrammingFeedback = formatFeedback(
+    summary.thinking || 
+    summary.diagramming || 
+    summary.solution ||
+    evaluation?.diagramming_feedback ||
+    evaluation?.thinking_feedback ||
+    ''
+  );
+
+  // Extract communication feedback
+  const communicationFeedback = formatFeedback(
+    summary.communication || 
+    summary.linguistic || 
+    summary.transcript ||
+    evaluation?.communication_feedback ||
+    evaluation?.transcript_feedback ||
+    ''
+  );
+
+  // Get completion time and date
+  const completionTimeMinutes = evaluation?.completionTimeMinutes || 32;
+  const completionDate = evaluation?.timestamp ? new Date(evaluation.timestamp).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
+  const timeLimit = 45; // Default time limit
+
+  // Render category section
+  const renderCategorySection = (categoryName, score, criteria, gradeLetter) => {
+    const isOpen = openSection === categoryName;
     
+    const handleToggle = () => {
+      // If clicking the same section, close it. Otherwise, open the clicked section.
+      setOpenSection(isOpen ? null : categoryName);
+    };
+
+    return (
+      <div className = "bg-white w-full">
+        {/* Category Header */}
+        <button
+          onClick={handleToggle}
+          className="border-gray-300 border-b border-solid flex gap-[12px] items-center px-[12px] py-[16px] w-full hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          <div className="flex flex-row items-center w-fit self-stretch">
+            <div className="aspect-square  text-white  bg-[#414141] flex flex-col h-full items-center justify-center overflow-clip rounded-lg ">
+              <p className="font-serif w-12 leading-normal not-italic text-[24px] ">
+                {gradeLetter}
+              </p>
+            </div>
+          </div>
+          <div className="bg-gray-100 flex items-center justify-center px-[16px] py-[12px] rounded-lg shrink-0">
+            <p className="font-serif leading-normal not-italic text-[20px] text-black">
+              {categoryName}
+            </p>
+          </div>
+          <div className="flex flex-[1_0_0] flex-col items-end justify-center min-h-px min-w-px">
+            <div className="flex items-start">
+              <div className="bg-gray-100 flex items-center justify-center px-[12px] py-[4px] rounded-lg shrink-0">
+                {isOpen ? (
+                  <ChevronUp size={16} strokeWidth={1.3} className="text-black" />
+                ) : (
+                  <ChevronDown size={16} strokeWidth={1.3} className="text-black" />
+                )}
+              </div>
+            </div>
+          </div>
+                  </button>
+
+        {/* Criteria Table */}
+        {isOpen && (
+        <div className="flex flex-col items-start w-full">
+          {/* Table Header */}
+          <div className=" border-gray-300 border-b border-solid flex gap-[20px] items-center pl-[36px] pr-[12px] w-full">
+            <div className="border-gray-300 border-r border-solid flex flex-[1_0_0] items-center min-h-px min-w-px py-[12px]">
+              <p className="font-sans leading-normal not-italic text-black text-sm">
+                Subfactors
+              </p>
+            </div>
+            <p className="flex-[1_0_0] font-sans leading-normal min-h-px min-w-px not-italic text-black text-sm whitespace-pre-wrap">
+              Feedback
+            </p>
+          </div>
+
+          {/* Table Rows */}
+          {criteria.length > 0 ? (
+            criteria.map((criterion, index) => (
+              <div key={index} className="border-gray-300 border-b border-solid flex gap-[20px] items-center pl-[36px] pr-[12px] w-full">
+                <div className="border-gray-300 border-r border-solid flex flex-[1_0_0] items-center min-h-px min-w-px py-[16px]">
+                  <div className="flex flex-col gap-[12px] items-start justify-center shrink-0">
+                    <div className="flex gap-[8px] items-start shrink-0">
+                      <div className="bg-gray-100 flex items-center justify-center px-[16px] py-[12px] rounded-lg shrink-0">
+                        <p className="font-sans leading-normal not-italic text-sm text-black">
+                          {getGradeLetter(criterion.score || score)}
+                        </p>
+</div>
+                      <div className="bg-gray-100 flex items-center justify-center px-[16px] py-[12px] rounded-lg shrink-0">
+                        <p className="font-sans leading-normal not-italic text-sm text-black">
+                          {criterion.name || 'Criterion'}
+                        </p>
+            </div>
+                    </div>
+                    <p className="font-sans leading-normal not-italic text-black text-sm">
+                      {criterion.description || criterion.feedback || getScoreLevel(criterion.score || score)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-[1_0_0] items-center min-h-px min-w-px">
+                  <p className="flex-[1_0_0] font-sans leading-normal min-h-px min-w-px not-italic text-black text-[14px] whitespace-pre-wrap">
+                    {criterion.feedback || 
+                     criterion.comment || 
+                     criterion.reasoning ||
+                     criterion.explanation ||
+                     criterion.details ||
+                     criterion.note ||
+                     'No specific feedback provided for this criterion.'}
+                  </p>
+                    </div>
+            </div>
+            ))
+          ) : (
+            // Fallback: Show expected criteria structure even if no data
+            <div className="border-gray-300 border-b border-solid flex gap-[20px] items-center pl-[36px] pr-[12px] w-full">
+              <div className="border-gray-300 border-r border-solid flex flex-[1_0_0] items-center min-h-px min-w-px py-[16px]">
+                <div className="flex flex-col gap-[12px] items-start justify-center shrink-0">
+                  <p className="font-sans leading-normal not-italic text-black text-sm">
+                    No criteria data available
+                  </p>
+                    </div>
+            </div>
+              <div className="flex flex-[1_0_0] items-center min-h-px min-w-px">
+                <p className="flex-[1_0_0] font-sans leading-normal min-h-px min-w-px not-italic text-black text-[14px] whitespace-pre-wrap">
+                  Waiting for evaluation data...
+                </p>
+                    </div>
+            </div>
+          )}
+        </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className = "h-dvh flex text-sm bg-gray-100">
-      <div className = "w-[360px]  h-full border-r bg-gray-50  border-gray-200">
-        <div className = "p-6 flex gap-3 ">
-         <Link href="/">
-         <House size={24} strokeWidth={1.3} />
-         </Link>
-        <Redo2 size={24} strokeWidth={1.3} />
-        <Eye size={24} strokeWidth={1.3} />
+    <div className="h-dvh flex text-sm">
+      <div className="flex-1 flex flex-col items-start w-full">
+        {/* Header with Navigation Icons */}
+        <div className="border-gray-300 border-b border-solid flex gap-[10px] items-start overflow-clip p-[24px] w-full">
+          <Link href="/" className="relative shrink-0 size-[24px]">
+            <House size={24} strokeWidth={1.3} className="text-black" />
+          </Link>
+          <button className="relative shrink-0 size-[24px]">
+            <Redo2 size={24} strokeWidth={1.3} className="text-black" />
+          </button>
+          <button className="relative shrink-0 size-[24px]">
+            <Eye size={24} strokeWidth={1.3} className="text-black" />
+          </button>
         </div>
         
-        <div className = "flex flex-col   items-center gap-0">
-            
-             <motion.div className = "h-px items-start flex bg-gray-300"
-             initial = {{ width: 0 }}
-             animate = {{ width: '100%' }}
-             transition = {{ duration: 0.5, ease: 'easeOut' }}
-             >
-             </motion.div>
-
-            <div className = "w-[156px] h-[102px] items-end flex justify-between">
-                <motion.div 
-                className = "w-px h-full bg-gray-300 rounded-xl"
-                initial = {{ height: 0 }}
-                animate = {{ height: '100%' }}
-                transition = {{ duration: 0.5, ease: 'easeOut' }}
-                >
-                </motion.div>
-                <motion.div 
-                className = "w-px  bg-gray-300 rounded-xl"
-                initial = {{ height: 0 }}
-                animate = {{ height: '100%' }}
-                transition = {{ duration: 0.5, ease: 'easeOut' }}
-                >
-                </motion.div>
+        {/* Task Parameters and Metadata */}
+        <div className="border-gray-300 border-b border-solid flex items-center justify-between p-[12px] w-full">
+          <div className="flex gap-[10px] items-center shrink-0">
+            {/* Design Pill */}
+            <div className="bg-gray-100 flex gap-[10px] items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+              <div className="bg-[#ffe1e1] flex items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+                <p className="font-sans leading-normal not-italic text-sm text-black">
+                  Design
+                </p>
             </div>
-            <div className = "w-full flex h-[156px] ">
-                <div className = "w-full h-full  flex-1 flex-col  items-end justify-between flex ">
-                    <motion.div
-                     className = "h-px items-start flex bg-gray-300"
-                     initial = {{ width: 0 }}
-                     animate = {{ width: '100%' }}
-                     transition = {{ duration: 0.5, ease: 'easeOut' }}
-                     >
-                     </motion.div>
-                    <motion.div className = "h-px items-start flex bg-gray-300"
-                     initial = {{ width: 0 }}
-                     animate = {{ width: '100%' }}
-                     transition = {{ duration: 0.5, ease: 'easeOut' }}
-                     >
-                     </motion.div>
-                </div>
-                <div className = "flex-1 aspect-square flex-col gap-3 text-white flex justify-center items-center bg-black">
-                    <div className = "flex items-center gap-2">
-                        <Sparkles size={16} strokeWidth={1.3} fill="#fcd34d" stroke="#fcd34d" />
-                    <p className = ""> Overall Score</p>
-                    </div>
-                    <h1 className = "text-5xl font-serif">78%</h1>
-                </div>
-                 <div className = "w-full h-full  flex-1 flex-col justify-between flex ">
-                    <motion.div className = "h-px items-start flex bg-gray-300"
-                     initial = {{ width: 0 }}
-                     animate = {{ width: '100%' }}
-                     transition = {{ duration: 0.5, ease: 'easeOut' }}
-                     >
-                     </motion.div>
-                    <motion.div className = "h-px items-start flex bg-gray-300"
-                     initial = {{ width: 0 }}
-                     animate = {{ width: '100%' }}
-                     transition = {{ duration: 0.5, ease: 'easeOut' }}
-                     >
-                     </motion.div>
-                </div>
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                {design || 'a landing page'}
+              </p>
             </div>
 
-                <div className = "w-[156px] h-[102px] items-start flex justify-between">
-                <motion.div 
-                className = "w-px h-full bg-gray-300 rounded-xl"
-                initial = {{ height: 0 }}
-                animate = {{ height: '100%' }}
-                transition = {{ duration: 0.5, ease: 'easeOut' }}
-                >
-                </motion.div>
-                <motion.div 
-                className = "w-px  bg-gray-300 rounded-xl"
-                initial = {{ height: 0 }}
-                animate = {{ height: '100%' }}
-                transition = {{ duration: 0.5, ease: 'easeOut' }}
-                >
-                </motion.div>
+            {/* For Pill */}
+            <div className="bg-gray-100 flex gap-[10px] items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+              <div className="bg-[#dbeaff] flex items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+                <p className="font-sans leading-normal not-italic text-sm text-black">
+                  For
+                </p>
+           </div>
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                {target || 'a hospital recipient page'}
+              </p>
+          </div>
+
+            {/* To Help Pill */}
+            <div className="bg-gray-100 flex gap-[10px] items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+              <div className="bg-[#fde7f4] flex items-center justify-center px-[12px] py-[8px] rounded-lg shrink-0">
+                <p className="font-sans leading-normal not-italic text-sm text-black">
+                  To Help
+                </p>
+           </div>
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                {tohelp || 'neurodivergent people'}
+              </p>
+           </div>
+          </div>
+
+          {/* Metadata Pills */}
+          <div className="flex gap-[10px] items-start shrink-0">
+            <div className="bg-gray-100 flex items-center justify-center px-[12px] py-[4px] rounded-lg shrink-0">
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                Duration | {timeLimit}m
+              </p>
             </div>
-            <motion.div className = "h-px items-start flex bg-gray-300"
-             initial = {{ width: 0 }}
-             animate = {{ width: '100%' }}
-             transition = {{ duration: 0.5, ease: 'easeOut' }}
-             >
-             </motion.div>
+            <div className="bg-gray-100 flex items-center justify-center px-[12px] py-[4px] rounded-lg shrink-0">
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                Time Spent | {completionTimeMinutes}m
+              </p>
+            </div>
+            <div className="bg-gray-100 flex items-center justify-center px-[12px] py-[4px] rounded-lg shrink-0">
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                Difficulty | Easy
+              </p>
+            </div>
+            <div className="bg-gray-100 flex items-center justify-center px-[12px] py-[4px] rounded-lg shrink-0">
+              <p className="font-['Helvetica_Neue',sans-serif] leading-normal not-italic text-sm text-black">
+                Date | {completionDate}
+              </p>
+            </div>
+            </div>
         </div>
-        <motion.div
-        initial = {{ opacity: 0 , y: 20 }}
-        animate = {{ opacity: 1 , y: 0 }}
-        transition = {{ duration: 0.5, ease: 'easeOut', delay: 0.2 }}
-         className = "p-6 border-b justify-between flex items-center border-gray-300">
-           <div className = "flex items-center gap-2">
-             <Clock size={16} strokeWidth={1.3}  />
-            <p className = "text-xl font-serif ">Duration</p>
-           </div>
-            <p className = " text-gray-600">32m</p>
-        </motion.div>
-         <motion.div
-         initial = {{ opacity: 0 , y: 20 }}
-         animate = {{ opacity: 1 , y: 0 }}
-         transition = {{ duration: 0.5, ease: 'easeOut', delay: 0.4 }}
-         className = "p-6 border-b justify-between flex items-center border-gray-300">
-            <div className = "flex items-center gap-2">
-             <Zap size={16} strokeWidth={1.3}  />
-            <p className = "text-xl font-serif ">Difficulty</p>
-           </div>
-            <p className = " text-gray-600">Easy</p>
-        </motion.div>
-         <motion.div
-         initial = {{ opacity: 0 , y: 20 }}
-         animate = {{ opacity: 1 , y: 0 }}
-         transition = {{ duration: 0.5, ease: 'easeOut', delay: 0.6 }}
-         className = "p-6 border-b justify-between flex items-center border-gray-300">
-            <div className = "flex items-center gap-2">
-             <Clock size={16} strokeWidth={1.3}  />
-            <p className = "text-xl font-serif ">Time Limit</p>
-           </div>
-            <p className = " text-gray-600">45m</p>
-        </motion.div>
-         <motion.div
-         initial = {{ opacity: 0 , y: 20 }}
-         animate = {{ opacity: 1 , y: 0 }}
-         transition = {{ duration: 0.5, ease: 'easeOut', delay: 0.8 }}
-         className = "p-6 border-b justify-between flex items-center border-gray-300">
-            <div className = "flex items-center gap-2">
-             <Calendar size={16} strokeWidth={1.3}  />
-            <p className = "text-xl font-serif ">Date</p>
-           </div>
-            <p className = " text-gray-600">Oct 12, 2025</p>
-        </motion.div>
+
+        {/* Raw Response Display (for testing) */}
+        {evaluation?.rawResponse && (
+          <div className="w-full mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+            <h3 className="text-lg font-serif mb-2">Raw AI Response (Testing Mode)</h3>
+            {evaluation.message && (
+              <p className="text-sm text-black mb-2 italic">{evaluation.message}</p>
+            )}
+            {evaluation.parseError && (
+              <p className="text-sm text-red-600 mb-2">Parse Error: {evaluation.parseError}</p>
+            )}
+            <div className="bg-white p-4 rounded border border-gray-300">
+              <pre className="text-sm font-mono text-black whitespace-pre-wrap wrap-break-word overflow-auto max-h-96">
+                {evaluation.rawResponse}
+              </pre>
+            </div>
       </div>
-      <div className = "p-8 flex-1 flex flex-col  items-start  h-full relative">
-          <div
-        className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none"
-        style={{ backgroundSize: '16px 16px' }}>
+        )}
+
+        {/* JSON Output Display (for debugging) */}
+        {evaluation && !evaluation.rawResponse && (
+          <div className="w-full mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+            <h3 className="text-lg font-serif mb-2">Evaluation JSON Output</h3>
+            <p className="text-sm font-mono text-black whitespace-pre-wrap break-all overflow-auto max-h-64">
+              {JSON.stringify(evaluation, null, 2)}
+            </p>
       </div>
+        )}
 
-        <div className = "overflow-y-auto bg-white rounded-xl  scrollbar-hide h-full flex-1 flex flex-col">
-            <div>
-            <div className = " flex  gap-8 border-b   relative  overflow-hidden  border-gray-200"> 
-                
+        {/* Only show category sections if not raw response */}
+        {!isRawResponse && (
+          <>
+            {/* Technical Category */}
+            {renderCategorySection('Technical', technicalScore, technicalCriteria, getGradeLetter(technicalScore))}
 
-             <div className="flex p-6   flex-col  border-gray-200  gap-8 items-start w-full">
-                             <h2 className = "text-2xl font-serif">Challenge Details</h2>
-        <div className = "flex flex-col gap-2">
+            {/* Diagramming Category */}
+            {renderCategorySection('Diagramming', diagrammingScore, diagrammingCriteria, getGradeLetter(diagrammingScore))}
 
-              <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
-            <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-red-100">DESIGN</p>{' '}
-              <p className="font-normal">{ 'a landing page'}</p>
-            </div>
-          </div>
-          <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
-            <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-blue-100">FOR</p>{' '}
-              <p className="font-normal">{ 'a hospital recipient page'}</p>
-            </div>
-          </div>
-          <div className="bg-gray-100 pl-2 pr-5 py-2 rounded-lg w-fit">
-              <div className="text-base flex items-center gap-2 text-black">
-              <p className="font-serif px-3 text-lg py-1 rounded-lg bg-pink-100">TO HELP</p>{' '}
-              <p className="font-normal">{ 'neurodivergent people'}</p>
-            </div>
-          </div>
-        </div>
-        </div>
-        <div className="perspective-[1000px] w-full  p-6  h-full">
-  <div className="
-    aspect-video h-full relative bg-gray-100 border border-gray-200 overflow-hidden rounded-xl
-    transform
-    transform-3d
+            {/* Communication Category */}
+            {renderCategorySection('Communication', communicationScore, communicationCriteria, getGradeLetter(communicationScore))}
+          </>
+        )}
 
-    -rotate-y-16
-    rotate-x-16
-    rotate-z-12
-  ">
-    <Image src="/whiteboardtest.png" alt="submission" fill />
-  </div>
-</div>
-
-         {/* <div className = "flex justify-between items-end   gap-2  flex-col ">
-          <div className = "p-6">
-              <div className="items-center relative flex flex-nowrap w-fit h-fit rounded-xl  bg-gray-100">
-
-            <div className = "flex flex-nowrap w-fit p-2 px-4  font-serif text-lg items-center gap-2">
-          Options 
-           </div>
-            <div className = "w-px  self-stretch bg-gray-200" />
-
-                <div className = "flex gap-2 flex-nowrap p-2 items-center rounded-xl">
-                  <button className="px-3 py-2 bg-white h-fit text-nowrap text-black cursor-pointer pointer-events-auto flex-nowrap rounded-xl flex items-center gap-2">
-                    <Redo2 size={16} strokeWidth={1.2} />
-                    Try Again
-                  </button>
-                  <button className="px-3 py-2 bg-white h-fit text-nowrap text-black cursor-pointer pointer-events-auto flex-nowrap rounded-xl flex items-center gap-2">
-                    <Eye size={16} strokeWidth={1.2} />
-                    View Submission
-                  </button>
-                </div>
-            </div>
-          </div>
-
-       
-         </div> */}
-
-</div>
-        <div className = "p-6  flex flex-col gap-12 border-b  border-gray-200">
-             
-
-            <div className = "flex  gap-2 items-start">
-                <h2 className = "text-2xl font-serif">Rubric Breakdown</h2>
-                 <BadgeQuestionMark size={16} strokeWidth={1.3}  />
-            </div>
-{/* Rubric Breakdown [Technical] */}
-            <div className= "flex">
-            <div className = "w-[240px]">
-                <div className = "py-2 px-3 w-fit flex items-center gap-2 bg-red-100 rounded-xl">
-                    <PenTool size={16} strokeWidth={1.3}  /> Technical</div>
-            </div>
-            <div className = "flex-1 flex-col flex w-full items-center gap-8">
-                <div className = "flex w-full self-stretch flex-1 gap-3 items-center">
-                    <div className = "w-full items-center flex h-full  gap-0">
-                        <div className = "w-[92%] h-px bg-black"></div>
-                        <div className = "w-px h-full bg-red-400"></div>
-                        <div className = "flex-1 h-px bg-gray-400"></div>
-                    </div>
-                    92/100%
-                </div>
-        <div className = "flex flex-col w-full gap-8">
-
-
-                <div className = "w-full text-gray-600 justify-between flex items-center">
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-red-100 ">
-                    <p>Logical Flow of Experience</p>
-                    <p className = "text-gray-400 text-xs">Was the problem broken down into sensible parts?</p>
-                    </div>
-                <p>Excellent</p>
-            </div>
-                    <div className = "w-full text-gray-600 justify-between flex items-center">
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-red-100 ">
-                    <p>Constraint Awareness</p>
-                    <p className = "text-gray-400 text-xs">Were the constraints of the problem considered?</p>
-                    </div>
-                <p>Good</p>
-            </div>
-            <div className = "w-full text-gray-600 justify-between flex items-center">  
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-red-100 ">
-                    <p>Decision Justification</p>
-                    <p className = "text-gray-400 text-xs">Were the decisions justified?</p>
-                    </div>
-                <p>Good</p>
-            </div>
-
-        </div>
-        
-            </div>
-            </div>
-
-{/* Rubric Breakdown [Diagramming] */}
-          <div className= "flex">
-           <div className = "w-[240px]">
-             <div className = "py-2 px-3 w-fit bg-blue-100 rounded-xl flex items-center gap-2"><SplinePointer size={16} strokeWidth={1.3}  /> Diagramming</div>
-           </div>
-           <div className = "flex-1 flex-col flex w-full items-center gap-8">
-            <div className = "flex w-full self-stretch flex-1 gap-3 items-center">
-                <div className = "w-full items-center flex h-full  gap-0">
-                    <div className = "w-[92%] h-px bg-black"></div>
-                    <div className = "w-px h-full bg-red-400"></div>
-                    <div className = "flex-1 h-px bg-gray-400"></div>
-                </div>
-                   92/100%
-            </div>
-            <div className = "flex flex-col w-full gap-8">
-            <div className = "w-full text-gray-600 justify-between flex items-center">  
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-blue-100 ">
-                    <p>Prompt-to-Screen Solution</p>
-                    <p className = "text-gray-400 text-xs">Was the prompt-to-screen solution executed?</p>
-                    </div>
-                <p>Good</p>
-            </div>
-         <div className = "w-full text-gray-600 justify-between flex items-center">
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-blue-100 ">
-                    <p>Visual Hierarchy</p>
-                    <p className = "text-gray-400 text-xs">Was the visual hierarchy executed?</p>
-                    </div>
-            <p>Excellent</p>
-         </div>
-                  <div className = "w-full text-gray-600 justify-between flex items-center">
-                <div className = "flex flex-col gap-1 border-l-2 pl-3 border-blue-100 ">
-                    <p>Funcitonal Layout</p>
-                    <p className = "text-gray-400 text-xs">Was the functional layout executed?</p>
-                    </div>
-            <p>Good</p>
-         </div>
-         </div>
-           </div>
-          </div>
-
-
-
-{/* Rubric Breakdown [Communication] */}
-          <div className= "flex">
-           <div className = "w-[240px]">
-             <div className = "py-2 px-3 w-fit bg-pink-100 rounded-xl flex items-center gap-2"> <MessageSquareText size={16} strokeWidth={1.3}  /> Communication</div>
-           </div>
-           <div className = "flex-1 flex-col flex w-full items-center gap-8">
-            <div className = "flex w-full self-stretch flex-1 gap-3 items-center">
-                <div className = "w-full items-center flex h-full  gap-0">
-                    <div className = "w-[92%] h-px bg-black"></div>
-                    <div className = "w-px h-full bg-red-400"></div>
-                    <div className = "flex-1 h-px bg-gray-400"></div>
-                </div>
-                   92/100%
-            </div>
-            <div className = "flex flex-col w-full gap-8">
-            <div className = "w-full text-gray-600 justify-between flex items-center">
-            <div className = "flex flex-col gap-1 border-l-2 pl-3 border-pink-100 ">
-                    <p>Question Quality</p>
-                    <p className = "text-gray-400 text-xs">Was the question quality executed?</p>
-                    </div>
-            <p>Good</p>
-         </div>
-                  <div className = "w-full text-gray-600 justify-between flex items-center">
-            <div className = "flex flex-col gap-1 border-l-2 pl-3 border-pink-100 ">
-                    <p>Responsiveness to prompts</p>
-                    <p className = "text-gray-400 text-xs">Was the responsiveness to prompts executed?</p>
-                    </div>
-            <p>Good</p>
-         </div>
-         <div className = "w-full text-gray-600 justify-between flex items-center">
-            <div className = "flex flex-col gap-1 border-l-2 pl-3 border-pink-100 ">
-                    <p>Clarification Timing</p>
-                    <p className = "text-gray-400 text-xs">Was the clarification timing executed?</p>
-                    </div>
-            <p>Excellent</p>
-         </div>
-         </div>
-           </div>
-          </div>
-
-
-        </div>
-
-                <div className = "p-6  flex flex-col gap-12 border-b border-gray-200">
-            <h2 className = "text-2xl font-serif">Feedback</h2>
-{/* Feedback [Technical] */}
-            <div className= "flex">
-            <div className = "w-[240px]">
-                <div className = "py-2 px-3 w-fit bg-red-100 rounded-xl flex items-center gap-2"><PenTool size={16} strokeWidth={1.3}  /> Technical</div>
-            </div>
-            <div className = "flex-1 text-gray-600 flex-col flex w-full items-center gap-3">
-                Your approach to defining the data relationships was excellent. You correctly identified the many-to-many relationship between Users and Projects early in the whiteboard session.
-However, you missed defining the edge case for archiving old projects, which was hinted at in the prompt requirements.
-            </div>
-            </div>
-
-{/* Feedback [Diagramming] */}
-            <div className= "flex">
-            <div className = "w-[240px]">
-                <div className = "py-2 px-3 w-fit bg-blue-100 rounded-xl flex items-center gap-2"><SplinePointer size={16} strokeWidth={1.3}  /> Diagramming</div>
-            </div>
-            <div className = "flex-1 text-gray-600 flex-col flex w-full items-center gap-3">
-                Your approach to defining the data relationships was excellent. You correctly identified the many-to-many relationship between Users and Projects early in the whiteboard session.
-However, you missed defining the edge case for archiving old projects, which was hinted at in the prompt requirements.
-            </div>
-            </div>
-
-
-
-{/* Feedback [Communication] */}
-            <div className= "flex">
-            <div className = "w-[240px]">
-                <div className = "py-2 px-3 w-fit bg-pink-100 rounded-xl flex items-center gap-2"><MessageSquareText size={16} strokeWidth={1.3}  /> Communication</div>
-            </div>
-            <div className = "flex-1 text-gray-600 flex-col flex w-full items-center gap-3">
-                Your approach to defining the data relationships was excellent. You correctly identified the many-to-many relationship between Users and Projects early in the whiteboard session.
-However, you missed defining the edge case for archiving old projects, which was hinted at in the prompt requirements.
-            </div>
-            </div>
-
-
-        </div>
-
-      </div>
-      </div>
+        {/* Divider */}
+        <div className="h-px shrink-0 w-full" />
       </div>
     </div>
   );

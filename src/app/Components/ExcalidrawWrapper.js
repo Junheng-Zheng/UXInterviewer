@@ -13,8 +13,6 @@ import {
   Type,
   Eraser,
   House,
-  Redo2,
-  MessageCircleQuestionMark,
 } from 'lucide-react';
 
 export default function ExcalidrawWrapper({ initialData, onReady, onChange }) {
@@ -101,49 +99,48 @@ const changeTool = (toolType) => {
     { id: 'eraser', icon: Eraser, label: 'Eraser' },
   ];
 
-  // Use useRef to store initialData only once (on mount)
-  const initialDataRef = useRef(null);
+  // More complete appState defaults to prevent undefined values in Excalidraw's internal inputs
+  const defaultAppState = {
+    viewBackgroundColor: "#ffffff",
+    zenModeEnabled: true,
+    currentItemFontFamily: 2,
+    currentItemFontSize: 20,
+    currentItemStrokeColor: "#1e1e1e",
+    currentItemBackgroundColor: "transparent",
+    currentItemFillStyle: "solid",
+    currentItemStrokeWidth: 2,
+    currentItemStrokeStyle: "solid",
+    currentItemRoughness: 1,
+    currentItemOpacity: 100,
+    currentItemTextAlign: "left",
+    scrollToContent: false,
+    gridSize: null,
+    theme: "light",
+  };
   
-  // Initialize ref only once on first render with guaranteed valid data
-  if (initialDataRef.current === null) {
-    // More complete appState defaults to prevent undefined values in Excalidraw's internal inputs
-    const defaultAppState = {
-      viewBackgroundColor: "#ffffff",
-      zenModeEnabled: true,
-      currentItemFontFamily: 2,
-      currentItemFontSize: 20,
-      currentItemStrokeColor: "#1e1e1e",
-      currentItemBackgroundColor: "transparent",
-      currentItemFillStyle: "solid",
-      currentItemStrokeWidth: 2,
-      currentItemStrokeStyle: "solid",
-      currentItemRoughness: 1,
-      currentItemOpacity: 100,
-      currentItemTextAlign: "left",
-      scrollToContent: false,
-      gridSize: null,
-      theme: "light",
-    };
-    
-    const defaultData = {
-      elements: [],
-      appState: defaultAppState,
-      files: {},
-      scrollToContent: false,
-    };
-    
-    // Only use passed initialData if it has valid structure
-    if (initialData && Array.isArray(initialData.elements)) {
-      initialDataRef.current = {
-        elements: initialData.elements,
-        appState: { ...defaultAppState, ...(initialData.appState || {}) },
-        files: initialData.files || {},
-        scrollToContent: false,
-      };
-    } else {
-      initialDataRef.current = defaultData;
-    }
-  }
+  const defaultData = {
+    elements: [],
+    appState: defaultAppState,
+    files: {},
+    scrollToContent: false,
+  };
+  
+  // Use useRef to store initialData only once (on mount)
+  // Ensure initialData is always a valid object, never null or undefined
+  const safeInitialData = initialData && typeof initialData === 'object' && Array.isArray(initialData.elements) 
+    ? initialData 
+    : null;
+  
+  const initialDataRef = useRef(
+    safeInitialData
+      ? {
+          elements: safeInitialData.elements,
+          appState: { ...defaultAppState, ...(safeInitialData.appState || {}) },
+          files: safeInitialData.files || {},
+          scrollToContent: false,
+        }
+      : defaultData
+  );
 
   if (!Comp) {
     return (

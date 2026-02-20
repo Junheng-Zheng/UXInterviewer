@@ -2,15 +2,26 @@ import { NextResponse } from "next/server";
 import { getSession } from '@/lib/session';
 import { getAWSCredentialsWithRefresh } from '@/lib/auth-helper';
 import { putItem } from '@/lib/dynamodb';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-// Get SYSTEM_PROMPT from environment variable
-const SYSTEM_PROMPT =
-  process.env.GRADING_SYSTEM_PROMPT;
+// Get SYSTEM_PROMPT from file
+let SYSTEM_PROMPT;
+try {
+  const promptPath = join(process.cwd(), 'prompts', 'grading-system-prompt.txt');
+  SYSTEM_PROMPT = readFileSync(promptPath, 'utf-8');
+  console.log('Loaded grading-system-prompt.txt from file, length:', SYSTEM_PROMPT.length);
+  console.log('Prompt preview (first 200 chars):', SYSTEM_PROMPT.substring(0, 200));
+} catch (error) {
+  console.error('Failed to read grading-system-prompt.txt:', error.message);
+  console.log('Falling back to environment variable GRADING_SYSTEM_PROMPT');
+  SYSTEM_PROMPT = process.env.GRADING_SYSTEM_PROMPT;
+}
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { design, target, tohelp, screenshot, excalidrawData, model = "gpt-4", completionTimeSeconds, completionTimeMinutes } = body;
+    const { design, target, tohelp, screenshot, excalidrawData, conversationHistory, model = "gpt-4", completionTimeSeconds, completionTimeMinutes } = body;
 
     // Check for screenshot (new method) or excalidrawData (old method)
     if (!design || !target || !tohelp) {
@@ -66,19 +77,54 @@ export async function POST(request) {
     let requestPayload;
 
     if (screenshot) {
+        // Format conversation history/transcript if provided
+        let transcriptText = '';
+        if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+          transcriptText = '\n\nUSER TRANSCRIPT:\n';
+          conversationHistory.forEach((msg, idx) => {
+            if (msg.role === 'user' || msg.role === 'assistant') {
+              transcriptText += `${msg.role === 'user' ? 'USER' : 'MODEL'}: ${msg.content || msg.text || ''}\n`;
+            }
+          });
+        }
+
+        // Format excalidraw data if provided (for text extraction)
+        let whiteboardDataText = '';
+        if (excalidrawData && excalidrawData.elements) {
+          try {
+            const elements = excalidrawData.elements;
+            const textElements = elements.filter(el => el.type === 'text' || (el.type === 'freedraw' && el.text));
+            if (textElements.length > 0) {
+              whiteboardDataText = '\n\nWHITEBOARD TEXT ELEMENTS (from excalidrawData):\n';
+              textElements.forEach((el, idx) => {
+                if (el.text) {
+                  whiteboardDataText += `[${idx + 1}] ${el.text}\n`;
+                } else if (el.originalText) {
+                  whiteboardDataText += `[${idx + 1}] ${el.originalText}\n`;
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error parsing excalidrawData:', error);
+          }
+        }
+        
         // Screenshot-based evaluation using Vision API
         userPrompt = `Evaluate this design submission:
 
         DESIGN CHALLENGE:
         DESIGN ${design}
         FOR ${target}
-        TO HELP ${tohelp}
+        TO HELP ${tohelp}${transcriptText}${whiteboardDataText}
 
-        Please analyze the provided screenshot of the Excalidraw design and provide your evaluation.`;
+        Please analyze the provided screenshot of the Excalidraw design and extract all text notes from the whiteboard. Categorize notes by phase (discovery, define, development, delivery) and include them in the whiteboard_notes section of your JSON response.`;
 
+        // Determine the model to use
+        const modelToUse = model === "gpt-4" ? "gpt-4o-mini" : model === "gpt-4o-mini" ? "gpt-4o-mini" : model;
+        
         requestPayload = {
         // Use gpt-4o or gpt-4o-mini for vision support
-        model: model === "gpt-4" ? "gpt-4o-mini" : model === "gpt-4o-mini" ? "gpt-4o-mini" : model,
+        model: modelToUse,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -96,7 +142,9 @@ export async function POST(request) {
           },
         ],
         temperature: 0.3, // Reduced from 0.7 to 0.3 for faster, more focused responses
-        max_tokens: 2000, // Reduced from 4000 to 2000 - sufficient for structured feedback
+        max_tokens: 6000, // Increased for JSON output with partial credit evaluations
+        // Request JSON format if model supports it (gpt-4o and gpt-4o-mini support this)
+        ...(modelToUse.includes("gpt-4o") ? { response_format: { type: "json_object" } } : {}),
       };
     } else {
       return NextResponse.json(
@@ -207,135 +255,46 @@ export async function POST(request) {
     console.log("==========================\n");
 
     // Try to parse JSON from the response
-    // Look for JSON in fenced code block labeled "json" (as per scoring_output_format)
-    let evaluation;
+    let parsedEvaluation = null;
+    let parseError = null;
+    
     try {
-      // Helper function to find balanced JSON object
-      const findJsonObject = (text) => {
-        let start = text.indexOf('{');
-        if (start === -1) return null;
-        
-        let depth = 0;
-        let inString = false;
-        let escapeNext = false;
-        
-        for (let i = start; i < text.length; i++) {
-          const char = text[i];
-          
-          if (escapeNext) {
-            escapeNext = false;
-            continue;
-          }
-          
-          if (char === '\\') {
-            escapeNext = true;
-            continue;
-          }
-          
-          if (char === '"') {
-            inString = !inString;
-            continue;
-          }
-          
-          if (!inString) {
-            if (char === '{') depth++;
-            if (char === '}') {
-              depth--;
-              if (depth === 0) {
-                return text.substring(start, i + 1);
-              }
-            }
-          }
-        }
-        return null;
-      };
-
-      // First try to find JSON in ```json ... ``` block
-      // Use a more robust regex that handles both complete and potentially truncated blocks
-      let jsonBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+      // Try to extract JSON from the content (it might be wrapped in markdown code blocks or have extra text)
+      let jsonString = content.trim();
       
-      // If not found, try to find a JSON block that might be at the end (truncated)
-      if (!jsonBlockMatch) {
-        const jsonBlockAtEnd = content.match(/```json\s*([\s\S]*)$/);
-        if (jsonBlockAtEnd) {
-          console.log("Found JSON block at end (may be truncated)");
-          jsonBlockMatch = jsonBlockAtEnd;
+      // Remove markdown code blocks if present
+      if (jsonString.startsWith('```')) {
+        const lines = jsonString.split('\n');
+        const startIndex = lines.findIndex(line => line.trim().startsWith('```'));
+        const endIndex = lines.findIndex((line, idx) => idx > startIndex && line.trim().startsWith('```'));
+        if (startIndex !== -1 && endIndex !== -1) {
+          jsonString = lines.slice(startIndex + 1, endIndex).join('\n');
         }
       }
       
-      if (jsonBlockMatch) {
-        console.log("Found JSON in code block with json label");
-        let jsonText = jsonBlockMatch[1].trim();
-        try {
-          evaluation = JSON.parse(jsonText);
-        } catch (e) {
-          // If parsing fails, try balanced extraction in case JSON is incomplete
-          console.log("Direct parse failed, trying balanced extraction");
-          const balancedJson = findJsonObject(jsonText);
-          if (balancedJson) {
-            evaluation = JSON.parse(balancedJson);
-          } else {
-            throw new Error("JSON in code block is invalid or truncated: " + e.message);
-          }
-        }
-      } else {
-        // Try to find JSON in ``` ... ``` block (without json label)
-        const codeBlockMatches = content.match(/```[\s\S]*?```/g);
-        if (codeBlockMatches && codeBlockMatches.length > 0) {
-          // Get the last code block (most likely to contain the JSON)
-          const lastBlock = codeBlockMatches[codeBlockMatches.length - 1];
-          const codeContent = lastBlock.replace(/```/g, '').trim();
-          // Remove "json" label if present at the start
-          const jsonContent = codeContent.replace(/^json\s*/i, '').trim();
-          try {
-            console.log("Found JSON in code block (no label)");
-            evaluation = JSON.parse(jsonContent);
-          } catch (e) {
-            console.log("Failed to parse code block content, trying balanced extraction");
-            // Try to find balanced JSON in the code block
-            const balancedJson = findJsonObject(jsonContent);
-            if (balancedJson) {
-              evaluation = JSON.parse(balancedJson);
-            } else {
-              throw new Error("JSON appears to be truncated or invalid: " + e.message);
-            }
-          }
-        } else {
-          // Check if there's a partial code block at the end
-          const partialCodeBlock = content.match(/```json\s*([\s\S]*)$/);
-          if (partialCodeBlock) {
-            const jsonText = partialCodeBlock[1].trim();
-            const balancedJson = findJsonObject(jsonText);
-            if (balancedJson) {
-              console.log("Found partial JSON block, extracted balanced JSON");
-              evaluation = JSON.parse(balancedJson);
-            } else {
-              throw new Error("JSON response appears to be truncated. The response was cut off before completion. Try increasing max_tokens or check the API response limits.");
-            }
-          } else {
-            // If still not parsed, try to find any JSON object in the content using balanced extraction
-            const balancedJson = findJsonObject(content);
-            if (balancedJson) {
-              console.log("Found JSON object using balanced extraction");
-              evaluation = JSON.parse(balancedJson);
-            } else {
-              throw new Error("No valid JSON found in response. Content preview: " + content.substring(0, 200));
-            }
-          }
-        }
+      // Try to find JSON object in the content
+      const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonString = jsonMatch[0];
       }
-    } catch (parseError) {
-      console.error("JSON Parse Error:", parseError.message);
-      console.error("Content that failed to parse:", content);
-      return NextResponse.json(
-        { 
-          error: "Failed to parse evaluation response", 
-          details: parseError.message,
-          rawContent: content.substring(0, 500) // Include first 500 chars for debugging
-        },
-        { status: 500 }
-      );
+      
+      parsedEvaluation = JSON.parse(jsonString);
+      console.log("=== PARSED JSON EVALUATION ===");
+      console.log(JSON.stringify(parsedEvaluation, null, 2));
+      console.log("=============================\n");
+    } catch (error) {
+      parseError = error.message;
+      console.error("Failed to parse JSON from response:", error);
+      console.log("Content that failed to parse:", content.substring(0, 500));
     }
+
+    // Return evaluation with parsed JSON if available, otherwise return raw response
+    const evaluation = {
+      rawResponse: content,
+      parsed: parsedEvaluation,
+      parseError: parseError,
+      timestamp: new Date().toISOString(),
+    };
 
     // Save submission to DynamoDB after successful grading
     try {
@@ -349,46 +308,6 @@ export async function POST(request) {
           // Create unique submission ID
           const submissionId = `submission-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
           const timestamp = new Date().toISOString();
-          
-          // Extract scores from evaluation object
-          // Support both new rubric (thinking_score, solution_score, communication_score) 
-          // and old fields (diagram_overall_score, technical_overall_score, transcript_overall_score) for backward compatibility
-          const scores = {
-            thinking: evaluation.thinking_score ?? evaluation.diagram_overall_score ?? 0,
-            solution: evaluation.solution_score ?? evaluation.technical_overall_score ?? 0,
-            communication: evaluation.communication_score ?? evaluation.transcript_overall_score ?? 0,
-            // Legacy field names for backward compatibility
-            diagramming: evaluation.diagram_overall_score ?? evaluation.thinking_score ?? 0,
-            technical: evaluation.technical_overall_score ?? evaluation.solution_score ?? 0,
-            linguistics: evaluation.transcript_overall_score ?? evaluation.communication_score ?? 0,
-            overall: evaluation.overall_score ?? 0,
-          };
-          
-          // Extract breakdown from criteria
-          // Support both new rubric (thinking, solution, communication) and old (diagramming, technical, linguistic)
-          const breakdown = [];
-          if (evaluation.criteria) {
-            // New rubric fields
-            if (Array.isArray(evaluation.criteria.thinking)) {
-              breakdown.push(...evaluation.criteria.thinking.map(item => ({ ...item, category: 'thinking' })));
-            }
-            if (Array.isArray(evaluation.criteria.solution)) {
-              breakdown.push(...evaluation.criteria.solution.map(item => ({ ...item, category: 'solution' })));
-            }
-            if (Array.isArray(evaluation.criteria.communication)) {
-              breakdown.push(...evaluation.criteria.communication.map(item => ({ ...item, category: 'communication' })));
-            }
-            // Old rubric fields (for backward compatibility)
-            if (Array.isArray(evaluation.criteria.diagramming)) {
-              breakdown.push(...evaluation.criteria.diagramming.map(item => ({ ...item, category: 'diagramming' })));
-            }
-            if (Array.isArray(evaluation.criteria.technical)) {
-              breakdown.push(...evaluation.criteria.technical.map(item => ({ ...item, category: 'technical' })));
-            }
-            if (Array.isArray(evaluation.criteria.linguistic)) {
-              breakdown.push(...evaluation.criteria.linguistic.map(item => ({ ...item, category: 'linguistic' })));
-            }
-          }
           
           // Prepare submission item for DynamoDB
           // Using PK/SK pattern for single-table design
@@ -406,10 +325,8 @@ export async function POST(request) {
             // Completion time
             completionTimeSeconds: completionTimeSeconds || null,
             completionTimeMinutes: completionTimeMinutes || null,
-            // Evaluation results
+            // Evaluation results (raw text)
             evaluation: evaluation,
-            scores: scores,
-            breakdown: breakdown,
             // Store excalidraw JSON data (not screenshot - too large for DynamoDB)
             excalidrawData: excalidrawData ? JSON.stringify(excalidrawData) : null,
             // Note: Screenshot is not stored in DynamoDB due to size limits (400KB max)
@@ -440,6 +357,7 @@ export async function POST(request) {
       console.error("Error getting session for DynamoDB save:", sessionError);
     }
 
+    // Return raw text evaluation (no transformation)
     return NextResponse.json(evaluation);
   } catch (error) {
     console.error("Error grading submission:", error);

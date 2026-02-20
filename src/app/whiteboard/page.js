@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark, Play, Pause } from 'lucide-react';
+import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark, Play, Pause, Trash2 } from 'lucide-react';
 import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
 import useStore from '../../store/module';
 import { AudioLines, Sparkles, X, Keyboard, MousePointer2, SplinePointer, } from 'lucide-react';
@@ -83,14 +83,19 @@ export default function WhiteboardPage() {
   // Restart confirmation modal state
   const [showRestartModal, setShowRestartModal] = useState(false);
   
+  // Clear whiteboard confirmation modal state
+  const [showClearWhiteboardModal, setShowClearWhiteboardModal] = useState(false);
+  
   // Input mode state (speech or keyboard)
   const [inputMode, setInputMode] = useState('keyboard'); // 'speech' or 'keyboard'
   const [isMicActive, setIsMicActive] = useState(false);
   const [audioLevels, setAudioLevels] = useState(Array(20).fill(0));
   const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
   const micStreamRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const visualizationIntervalRef = useRef(null);
+  const visualizationWatchdogRef = useRef(null);
+  const lastVisualizationUpdateRef = useRef(null);
   
   // Audio playback
   const audioRef = useRef(null);
@@ -110,6 +115,7 @@ export default function WhiteboardPage() {
   const recognitionStartTimeRef = useRef(null);
   const recognitionRef = useRef(null);
   const isRecognitionRunningRef = useRef(false);
+  const recognitionAbortedRef = useRef(false); // Track if recognition was aborted to prevent restart loop
   const excalidrawDataRef = useRef(null);
   const isSubmittedRef = useRef(false);
   const isPausedRef = useRef(false);
@@ -120,6 +126,7 @@ export default function WhiteboardPage() {
   const excalidrawAPIRef = useRef(null);
   const conversationBoxRef = useRef(null);
   const hasInitialGreetingRef = useRef(false);
+  const hasCheckedContinuationRef = useRef(false);
   const inputModeRef = useRef(inputMode);
   const isMicActiveRef = useRef(isMicActive);
   
@@ -127,7 +134,16 @@ export default function WhiteboardPage() {
   const [isLocalStorageLoaded, setIsLocalStorageLoaded] = useState(false);
   
   // Stable initialData reference for ExcalidrawWrapper - will be set once from localStorage
-  const excalidrawInitialDataRef = useRef(null);
+  // Initialize with default data to prevent controlled/uncontrolled input error
+  const excalidrawInitialDataRef = useRef({
+    elements: [],
+    appState: {
+      viewBackgroundColor: "#ffffff",
+      zenModeEnabled: true,
+      currentItemFontFamily: 2,
+    },
+    files: {},
+  });
   
   const [interviewerMessage, setInterviewerMessage] = useState({
     visible: "",
@@ -153,8 +169,12 @@ export default function WhiteboardPage() {
         recognitionRef.current.stop();
         isRecognitionRunningRef.current = false;
         setIsListening(false);
+        recognitionAbortedRef.current = false; // Clear aborted flag when intentionally stopped
       } catch (e) {
         console.warn("Error stopping recognition:", e);
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        recognitionAbortedRef.current = false;
       }
     }
   };
@@ -162,15 +182,32 @@ export default function WhiteboardPage() {
   // Start speech recognition safely
   const startRecognition = () => {
     const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current && !isPausedRef.current;
-    // Only start recognition if in speech mode
-    if (showInterview && inputModeRef.current === 'speech' && recognitionRef.current && !isRecognitionRunningRef.current) {
+    // Only start recognition if in speech mode and microphone is active
+    if (showInterview && inputModeRef.current === 'speech' && isMicActiveRef.current && recognitionRef.current && !isRecognitionRunningRef.current) {
       try {
+        // Clear aborted flag before starting
+        recognitionAbortedRef.current = false;
         recognitionRef.current.start();
         isRecognitionRunningRef.current = true;
         setIsListening(true);
+        console.log('Speech recognition started');
       } catch (e) {
         console.warn("Error starting recognition:", e);
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        // If error is because already running, mark as aborted
+        if (e.message && e.message.includes('already')) {
+          recognitionAbortedRef.current = true;
+        }
       }
+    } else {
+      console.log('Speech recognition not started - conditions:', {
+        showInterview,
+        inputMode: inputModeRef.current,
+        isMicActive: isMicActiveRef.current,
+        hasRecognition: !!recognitionRef.current,
+        isRunning: isRecognitionRunningRef.current
+      });
     }
   };
 
@@ -268,9 +305,29 @@ export default function WhiteboardPage() {
   }, [isAISpeaking]);
 
   // Generate AI response and play audio
-  const generateAIResponse = async (userTranscript, isInitialGreeting = false) => {
+  const generateAIResponse = useCallback(async (userTranscript, isInitialGreeting = false) => {
     // Allow empty transcript only for initial greeting
     if (!isInitialGreeting && (!userTranscript || userTranscript.trim().length === 0)) {
+      return;
+    }
+
+    // Get current values from store directly (not from closure) to ensure we have latest values
+    const currentDesign = useStore.getState().design;
+    const currentTarget = useStore.getState().target;
+    const currentTohelp = useStore.getState().tohelp;
+    const currentSelectedModel = useStore.getState().selectedModel;
+
+    // Validate required parameters before proceeding
+    if (!currentDesign || !currentTarget || !currentTohelp) {
+      console.warn('⚠️ Cannot generate AI response - missing interview parameters:', { 
+        design: currentDesign, 
+        target: currentTarget, 
+        tohelp: currentTohelp 
+      });
+      if (isInitialGreeting) {
+        // Reset flag to allow retry when params are available
+        hasInitialGreetingRef.current = false;
+      }
       return;
     }
 
@@ -280,8 +337,10 @@ export default function WhiteboardPage() {
     stopAudio(); // Stop any current audio
 
     try {
-      // Add user message to conversation history (only if not initial greeting)
+      // Add user message to conversation history IMMEDIATELY (only if not initial greeting)
+      // This ensures the message appears in the UI right away, even if API calls fail
       let updatedHistory = [...conversationHistory];
+      let userMessageAdded = false;
       if (!isInitialGreeting && userTranscript && userTranscript.trim().length > 0) {
         const userMessage = {
           role: "user",
@@ -289,20 +348,67 @@ export default function WhiteboardPage() {
           timestamp: new Date(),
         };
         updatedHistory = [...updatedHistory, userMessage];
-      }
+        userMessageAdded = true;
       
       // Keep conversation history bounded (last 20 messages to avoid token limits)
       updatedHistory = updatedHistory.slice(-20);
+        
+        // Update conversation history state synchronously
       setConversationHistory(updatedHistory);
       
-      // Clear current user message AFTER adding to history
-      if (!isInitialGreeting && userTranscript && userTranscript.trim().length > 0) {
+        // Use a small delay to ensure state update propagates and React renders before clearing
+        // This prevents the message from disappearing before it appears in history
+        // Using requestAnimationFrame to ensure DOM update happens first
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            // Clear current user message AFTER adding to history and ensuring it's rendered
         setCurrentUserMessage("");
         currentUserMessageRef.current = "";
+            setInterimTranscript("");
+            console.log('✅ User message cleared from currentUserMessage (now in conversation history)');
+          }, 100); // Increased delay to ensure React has rendered
+        });
+        
+        console.log('✅ User message added to conversation history:', userTranscript.substring(0, 50));
       }
 
-      // Call interviewer chat API
-      const response = await fetch("/api/interviewer/chat", {
+      // Get current whiteboard data - prefer API, fallback to onChange data
+      let whiteboardData = null;
+      if (excalidrawAPIRef.current) {
+        try {
+          const elements = excalidrawAPIRef.current.getSceneElements().filter(el => !el.isDeleted);
+          const appState = excalidrawAPIRef.current.getAppState();
+          whiteboardData = { elements, appState };
+        } catch (error) {
+          console.warn("Error getting whiteboard data from API, using onChange data:", error);
+          whiteboardData = excalidrawDataRef.current;
+        }
+      } else if (excalidrawDataRef.current) {
+        whiteboardData = excalidrawDataRef.current;
+      }
+
+      // Call interviewer chat API with timeout
+      console.log('📤 Calling interviewer chat API...', {
+        transcriptLength: userTranscript.trim().length,
+        historyLength: updatedHistory.slice(0, -1).length,
+        hasDesign: !!currentDesign,
+        hasTarget: !!currentTarget,
+        hasTohelp: !!currentTohelp,
+        hasWhiteboard: !!whiteboardData
+      });
+      
+      // Create an AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error('⏰ Interviewer chat API request timed out after 60 seconds');
+        controller.abort();
+      }, 60000); // 60 second timeout
+      
+      const requestStartTime = Date.now();
+      let response;
+      try {
+        console.log('📡 Sending fetch request to /api/interviewer/chat...');
+        response = await fetch("/api/interviewer/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -313,31 +419,63 @@ export default function WhiteboardPage() {
             role: msg.role,
             content: msg.content,
           })),
-          design,
-          target,
-          tohelp,
-        }),
-      });
+            design: currentDesign,
+            target: currentTarget,
+            tohelp: currentTohelp,
+            whiteboard: whiteboardData,
+          }),
+          signal: controller.signal,
+        });
+        const requestDuration = Date.now() - requestStartTime;
+        console.log(`✅ Fetch request completed in ${requestDuration}ms, status: ${response.status}`);
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        const requestDuration = Date.now() - requestStartTime;
+        console.error(`❌ Fetch request failed after ${requestDuration}ms:`, fetchError);
+        if (fetchError.name === 'AbortError') {
+          throw new Error("Request timed out. The AI is taking too long to respond. Please try again.");
+        }
+        throw fetchError;
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.error || "Failed to generate AI response");
+        console.error('❌ Interviewer chat API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(errorData.message || errorData.error || `Failed to generate AI response (${response.status})`);
       }
 
-      const data = await response.json();
+      console.log('✅ Interviewer chat API response received, parsing JSON...');
+      const data = await response.json().catch((parseError) => {
+        console.error('❌ Error parsing API response:', parseError);
+        throw new Error("Invalid response from AI. Please try again.");
+      });
+      
       const aiResponse = data.response;
+      console.log('✅ AI response received:', {
+        hasResponse: !!aiResponse,
+        responseLength: aiResponse?.length || 0,
+        preview: aiResponse?.substring(0, 100)
+      });
 
       if (!aiResponse) {
+        console.error('❌ No response in API data:', data);
         throw new Error("No response received from AI");
       }
 
-      // Add AI message to conversation history
+      // Add AI message to conversation history IMMEDIATELY
+      // This ensures the response is visible even if TTS fails
       const aiMessage = {
         role: "assistant",
         content: aiResponse,
         timestamp: new Date(),
       };
       
+      console.log('✅ Adding AI response to conversation history immediately');
       setConversationHistory((prev) => [...prev, aiMessage]);
       
       // Update interviewer message display
@@ -346,8 +484,20 @@ export default function WhiteboardPage() {
         fading: aiResponse.substring(Math.min(50, aiResponse.length))
       });
 
-      // Generate audio using TTS
-      const ttsResponse = await fetch("/api/tts/generate", {
+      // Update state to show response is ready (even before TTS)
+      setConversationState("waiting");
+      conversationStateRef.current = "waiting";
+      setIsProcessingAI(false);
+      isProcessingAIRef.current = false;
+
+      // Generate audio using TTS with timeout (non-blocking - response already shown)
+      console.log('🎤 Generating TTS audio for response:', aiResponse.substring(0, 100));
+      const ttsController = new AbortController();
+      const ttsTimeoutId = setTimeout(() => ttsController.abort(), 30000); // 30 second timeout for TTS
+      
+      let ttsResponse;
+      try {
+        ttsResponse = await fetch("/api/tts/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,25 +505,73 @@ export default function WhiteboardPage() {
         body: JSON.stringify({
           text: aiResponse,
         }),
-      });
+          signal: ttsController.signal,
+        });
+        clearTimeout(ttsTimeoutId);
+      } catch (ttsFetchError) {
+        clearTimeout(ttsTimeoutId);
+        console.warn('⚠️ TTS request failed, continuing without audio:', ttsFetchError);
+        // Don't throw - allow response to be displayed even if TTS fails
+        // Response is already in conversation history, so user can see it
+        setErrorMessage("AI response received but audio generation failed. You can continue the conversation.");
+        // Resume recognition so user can speak again
+        setTimeout(() => {
+          if (inputModeRef.current === 'speech' && isMicActiveRef.current) {
+            startRecognition();
+          }
+        }, 1000);
+        return; // Exit early, response is already in conversation history
+      }
 
       if (!ttsResponse.ok) {
         const errorData = await ttsResponse.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.error || "Failed to generate audio");
+        console.warn('⚠️ TTS API returned error, continuing without audio:', {
+          status: ttsResponse.status,
+          statusText: ttsResponse.statusText,
+          error: errorData
+        });
+        // Don't throw - response is already shown
+        setErrorMessage("AI response received but audio generation failed. You can continue the conversation.");
+        setTimeout(() => {
+          if (inputModeRef.current === 'speech' && isMicActiveRef.current) {
+            startRecognition();
+          }
+        }, 1000);
+        return; // Exit early, response is already in conversation history
       }
 
       const ttsData = await ttsResponse.json();
+      console.log('✅ TTS response received:', {
+        hasAudio: !!ttsData.audio,
+        audioLength: ttsData.audio?.length || 0,
+        mimeType: ttsData.mimeType,
+        size: ttsData.size
+      });
       
       if (!ttsData.audio) {
-        throw new Error("No audio data received");
+        console.error('❌ TTS response missing audio data:', ttsData);
+        throw new Error("No audio data received from TTS service");
       }
 
       // Play audio
-      const audioBlob = new Blob(
+      console.log('🔊 Creating audio blob from TTS data...');
+      let audioBlob;
+      try {
+        audioBlob = new Blob(
         [Uint8Array.from(atob(ttsData.audio), (c) => c.charCodeAt(0))],
         { type: ttsData.mimeType || "audio/mpeg" }
       );
+        console.log('✅ Audio blob created:', {
+          size: audioBlob.size,
+          type: audioBlob.type
+        });
+      } catch (blobError) {
+        console.error('❌ Error creating audio blob:', blobError);
+        throw new Error("Failed to create audio file from TTS data");
+      }
+      
       const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('✅ Audio URL created:', audioUrl.substring(0, 50) + '...');
 
       if (!audioRef.current) {
         audioRef.current = new Audio();
@@ -442,13 +640,20 @@ export default function WhiteboardPage() {
       
       // Try to play audio - handle autoplay restrictions
       try {
+        console.log('▶️ Attempting to play audio...');
         await audioRef.current.play();
+        console.log('✅ Audio playback started successfully');
         // If successful, mark audio as unlocked for future plays
         audioUnlockedRef.current = true;
         pendingAudioRef.current = null;
       } catch (playError) {
         // Autoplay was blocked - user needs to interact first
-        console.warn("Audio autoplay blocked:", playError);
+        console.warn("⚠️ Audio autoplay blocked:", playError);
+        console.warn("Audio error details:", {
+          name: playError.name,
+          message: playError.message,
+          code: playError.code
+        });
         setIsAISpeaking(false);
         setConversationState("waiting");
         
@@ -457,17 +662,53 @@ export default function WhiteboardPage() {
         setHasPendingAudio(true);
         
         // Show a message that user needs to interact
-        setErrorMessage("Audio ready. Click to hear the response.");
+        setErrorMessage("Audio ready. Click anywhere to hear the response.");
       }
     } catch (error) {
-      console.error("Error generating AI response:", error);
-      setErrorMessage(error.message || "An error occurred. Please try again.");
+      console.error("❌ Error generating AI response:", error);
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Provide more specific error messages
+      let userFriendlyMessage = error.message || "An error occurred. Please try again.";
+      
+      // Check if it's a timeout error
+      if (error.message.includes("timed out") || error.message.includes("timeout")) {
+        userFriendlyMessage = "The AI is taking too long to respond. Please try speaking again.";
+      } else if (error.message.includes("TTS") || error.message.includes("audio") || error.message.includes("11Labs")) {
+        userFriendlyMessage = `TTS Error: ${error.message}. The conversation will continue without audio.`;
+      } else if (error.message.includes("Failed to generate audio")) {
+        userFriendlyMessage = `Audio generation failed: ${error.message}. The conversation will continue without audio.`;
+      }
+      
+      setErrorMessage(userFriendlyMessage);
       setConversationState("waiting");
+      conversationStateRef.current = "waiting";
       setIsProcessingAI(false);
+      isProcessingAIRef.current = false;
+      
+      // Resume recognition so user can try again
+      setTimeout(() => {
+        if (inputModeRef.current === 'speech' && isMicActiveRef.current && !isAISpeakingRef.current) {
+          startRecognition();
+          console.log('🔄 Resumed speech recognition after error');
+        }
+      }, 1000);
+      
+      // If initial greeting failed, reset flag to allow retry
+      if (isInitialGreeting) {
+        console.log('🔄 Initial greeting failed, will retry...');
+        hasInitialGreetingRef.current = false;
+      }
     } finally {
+      // Ensure processing state is cleared even if there was an early return
       setIsProcessingAI(false);
+      isProcessingAIRef.current = false;
     }
-  };
+  }, [conversationHistory]); // design, target, tohelp removed - we get them directly from store when called
 
   // Handle silence detection - when user stops speaking
   const handleSilenceDetected = () => {
@@ -476,11 +717,57 @@ export default function WhiteboardPage() {
     const state = conversationStateRef.current;
     const processing = isProcessingAIRef.current;
     
+    console.log('🔊 handleSilenceDetected called:', {
+      userMsg: userMsg.substring(0, 50),
+      userMsgLength: userMsg.length,
+      state,
+      processing,
+      isAISpeaking: isAISpeakingRef.current
+    });
+    
     // Require at least 3 characters to prevent noise from triggering responses
-    if (state === "user_turn" && userMsg.length >= 3 && !processing) {
+    if (state === "user_turn" && userMsg.length >= 3 && !processing && !isAISpeakingRef.current) {
       const finalTranscript = userMsg;
       setInterimTranscript("");
-      generateAIResponse(finalTranscript);
+      console.log('✅ Conditions met! Generating AI response for:', finalTranscript.substring(0, 50));
+      
+      // DON'T clear the message here - let generateAIResponse handle it after adding to history
+      // This ensures the message stays visible until it's in the conversation history
+      
+      // Set state to processing to prevent duplicate triggers
+      setConversationState("processing");
+      conversationStateRef.current = "processing";
+      setIsProcessingAI(true);
+      isProcessingAIRef.current = true;
+      
+      generateAIResponse(finalTranscript).catch((error) => {
+        console.error('❌ Error in generateAIResponse from handleSilenceDetected:', error);
+        // Show error message to user
+        setErrorMessage(error.message || "Failed to generate AI response. Please try again.");
+        // Reset state on error so user can try again
+        setConversationState("waiting");
+        conversationStateRef.current = "waiting";
+        setIsProcessingAI(false);
+        isProcessingAIRef.current = false;
+        // Resume recognition so user can speak again
+        setTimeout(() => {
+          if (inputModeRef.current === 'speech' && isMicActiveRef.current) {
+            startRecognition();
+          }
+        }, 1000);
+      });
+    } else {
+      console.log('⚠️ Silence detected but conditions not met:', {
+        state,
+        expectedState: "user_turn",
+        stateMatch: state === "user_turn",
+        userMsgLength: userMsg.length,
+        minLength: 3,
+        lengthOk: userMsg.length >= 3,
+        processing,
+        isAISpeaking: isAISpeakingRef.current,
+        allConditions: state === "user_turn" && userMsg.length >= 3 && !processing && !isAISpeakingRef.current
+      });
     }
   };
 
@@ -498,19 +785,76 @@ export default function WhiteboardPage() {
     lastSpeechTimeRef.current = Date.now();
     
     const state = conversationStateRef.current;
+    console.log('🔄 resetSilenceTimer called, current state:', state);
+    
+    // Always allow user to speak - if state is invalid or unexpected, reset to "waiting" first
+    // This ensures silence timer works even after page reload when state might not be properly initialized
+    if (state !== "waiting" && state !== "user_turn" && state !== "processing" && state !== "ai_turn") {
+      console.log('⚠️ Invalid conversation state detected:', state, '- resetting to "waiting"');
+      setConversationState("waiting");
+      conversationStateRef.current = "waiting";
+    }
+    
     // Only set up silence timer if we're in a state where user can speak
-    if (state === "waiting" || state === "user_turn") {
+    // Also allow if state is "processing" or "ai_turn" (user can interrupt)
+    const currentState = conversationStateRef.current;
+    if (currentState === "waiting" || currentState === "user_turn" || currentState === "processing" || currentState === "ai_turn") {
+      // If AI is speaking or processing, stop it and switch to user turn
+      if (currentState === "ai_turn" || currentState === "processing") {
+        stopAudio();
+        setIsProcessingAI(false);
       setConversationState("user_turn");
+        conversationStateRef.current = "user_turn";
+        console.log('✅ Set conversation state to user_turn (interrupted AI), starting silence timer');
+      } else if (currentState !== "user_turn") {
+        // Only update state if it's not already "user_turn" to avoid unnecessary re-renders
+        setConversationState("user_turn");
+        conversationStateRef.current = "user_turn";
+        console.log('✅ Set conversation state to user_turn, starting silence timer');
+      } else {
+        // State is already "user_turn", just reset the timer (no state update needed)
+        console.log('✅ Resetting silence timer (state already user_turn)');
+      }
+      
+      console.log('⏰ Setting up silence timer, will fire in', SILENCE_THRESHOLD_MS, 'ms');
       silenceTimerRef.current = setTimeout(() => {
         // Check refs again at execution time
-        const currentState = conversationStateRef.current;
+        const timerState = conversationStateRef.current;
         const userMsg = currentUserMessageRef.current.trim();
         const processing = isProcessingAIRef.current;
+        const aiSpeaking = isAISpeakingRef.current;
         
-        if (currentState === "user_turn" && userMsg.length > 0 && !processing) {
+        console.log('⏰ Silence timer FIRED:', {
+          timerState,
+          userMsgLength: userMsg.length,
+          userMsgPreview: userMsg.substring(0, 50),
+          processing,
+          aiSpeaking,
+          timerId: silenceTimerRef.current
+        });
+        
+        // Only trigger if we have a meaningful message (at least 3 chars) and we're in user_turn state
+        if (timerState === "user_turn" && userMsg.length >= 3 && !processing && !aiSpeaking) {
+          console.log('✅ Timer conditions met, calling handleSilenceDetected');
           handleSilenceDetected();
+        } else {
+          console.log('⚠️ Silence timer fired but conditions not met for response:', {
+            state: timerState,
+            expectedState: "user_turn",
+            stateMatch: timerState === "user_turn",
+            msgLength: userMsg.length,
+            minLength: 3,
+            lengthOk: userMsg.length >= 3,
+            processing,
+            aiSpeaking,
+            allConditions: timerState === "user_turn" && userMsg.length >= 3 && !processing && !aiSpeaking
+          });
         }
       }, SILENCE_THRESHOLD_MS);
+      
+      console.log('✅ Silence timer set up with ID:', silenceTimerRef.current);
+    } else {
+      console.log('⚠️ Cannot set up silence timer, invalid state after reset:', currentState);
     }
   };
 
@@ -616,18 +960,82 @@ export default function WhiteboardPage() {
     // Reset AI greeting
     hasInitialGreetingRef.current = false;
     
+    // Reset continuation check
+    hasCheckedContinuationRef.current = false;
+    
     // Close modal
     setShowRestartModal(false);
     
     console.log('Interview restarted');
   };
 
+  // Handle clear whiteboard button click
+  const handleClearWhiteboard = () => {
+    setShowClearWhiteboardModal(true);
+  };
+
+  // Confirm clear whiteboard
+  const confirmClearWhiteboard = () => {
+    // Clear whiteboard only (don't reset timer, conversation, etc.)
+    if (excalidrawAPIRef.current) {
+      const currentAppState = excalidrawAPIRef.current.getAppState();
+      excalidrawAPIRef.current.updateScene({
+        elements: [],
+        files: {},
+        appState: {
+          ...currentAppState,
+          viewBackgroundColor: "#ffffff",
+          zenModeEnabled: true,
+          currentItemFontFamily: 2,
+        },
+      });
+
+      // Update ref to empty state
+      excalidrawDataRef.current = {
+        elements: [],
+        appState: {
+          ...currentAppState,
+          viewBackgroundColor: "#ffffff",
+          zenModeEnabled: true,
+          currentItemFontFamily: 2,
+        },
+        files: {},
+      };
+
+      // Save empty whiteboard to localStorage
+      if (design && target && tohelp) {
+        const storageKey = getLocalStorageKey();
+        const emptyData = {
+          elements: [],
+          appState: {
+            ...currentAppState,
+            viewBackgroundColor: "#ffffff",
+            zenModeEnabled: true,
+            currentItemFontFamily: 2,
+          },
+          files: {},
+          scrollToContent: false,
+        };
+        
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(emptyData));
+          console.log('✅ Cleared whiteboard (preserved timer and conversation)');
+        } catch (error) {
+          console.error('Error saving cleared whiteboard:', error);
+        }
+      }
+    }
+    
+    // Close modal
+    setShowClearWhiteboardModal(false);
+  };
+
   // Start microphone for voice visualization
   const startMicrophone = async () => {
     // Prevent starting if already active (check refs, not state)
-    if (micStreamRef.current && audioContextRef.current && analyserRef.current) {
+    if (micStreamRef.current && isMicActiveRef.current) {
       console.log('Microphone already active, skipping start');
-      return;
+      return Promise.resolve();
     }
     
     // Clean up any existing resources first
@@ -639,39 +1047,36 @@ export default function WhiteboardPage() {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    if (analyserRef.current) {
-      analyserRef.current = null;
-    }
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    if (visualizationIntervalRef.current) {
+      clearInterval(visualizationIntervalRef.current);
+      visualizationIntervalRef.current = null;
+    }
+    if (visualizationWatchdogRef.current) {
+      clearInterval(visualizationWatchdogRef.current);
+      visualizationWatchdogRef.current = null;
+    }
     
     try {
       console.log('Starting microphone...');
+      // Get microphone stream (needed for speech recognition permissions)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
       
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = audioContext;
-      
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 1024; // Higher resolution for more detail
-      analyser.smoothingTimeConstant = 0.7; // Balance between smooth and responsive
-      analyser.minDecibels = -90; // Capture quieter sounds
-      analyser.maxDecibels = -10; // Better dynamic range
-      analyserRef.current = analyser;
-      
-      const microphone = audioContext.createMediaStreamSource(stream);
-      microphone.connect(analyser);
-      
       setIsMicActive(true);
-      console.log('Microphone started successfully, starting visualization');
-      visualizeAudio();
+      isMicActiveRef.current = true;
+      console.log('Microphone started successfully, starting wave decay animation');
+      startWaveDecayAnimation();
+      return Promise.resolve();
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setIsMicActive(false); // Reset on error
+      setIsMicActive(false);
+      isMicActiveRef.current = false;
       alert('Could not access microphone. Please check permissions.');
+      return Promise.reject(err);
     }
   };
 
@@ -686,47 +1091,38 @@ export default function WhiteboardPage() {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    if (analyserRef.current) {
-      analyserRef.current = null;
-    }
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
+    }
+    if (visualizationIntervalRef.current) {
+      clearInterval(visualizationIntervalRef.current);
+      visualizationIntervalRef.current = null;
+    }
+    if (visualizationWatchdogRef.current) {
+      clearInterval(visualizationWatchdogRef.current);
+      visualizationWatchdogRef.current = null;
     }
     setIsMicActive(false);
     setAudioLevels(Array(20).fill(0));
     console.log('Microphone stopped');
   };
 
-  // Visualize audio level
-  const visualizeAudio = () => {
-    if (!analyserRef.current) {
-      return;
-    }
+  // Trigger wave animation when transcription happens
+  const triggerWaveAnimation = () => {
+    // Use ref to check if mic is active (more reliable than state)
+    if (!isMicActiveRef.current) return;
     
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     const barCount = 20;
-    
-    const animate = () => {
-      if (!analyserRef.current) return;
-      
-      analyserRef.current.getByteFrequencyData(dataArray);
-      
-      // Calculate average audio level across all frequencies
-      const sum = dataArray.reduce((a, b) => a + b, 0);
-      const average = sum / dataArray.length;
-      const baseLevel = Math.min(1, (average / 255) * 4); // Amplify by 4x
-      
-      // Create symmetrical bars from center
-      const mirroredBars = [];
       const halfCount = Math.floor(barCount / 2);
       
-      // Create bars growing from center outward
+    // Create artificial wave pattern that peaks in the center
+    const mirroredBars = [];
       for (let i = 0; i < halfCount; i++) {
-        // Distance from center (0 = center, increases outward)
         const distanceFromCenter = i / halfCount;
-        // Apply falloff - center is full, edges diminish
-        const falloff = 1 - Math.pow(distanceFromCenter, 2); // Quadratic falloff
+      // Create a wave pattern with random variation for natural look
+      const baseLevel = 0.7 + Math.random() * 0.3; // 0.7 to 1.0 (increased for better visibility)
+      const falloff = 1 - Math.pow(distanceFromCenter, 1.3); // Gentler falloff for wider waves
         const level = baseLevel * falloff;
         mirroredBars.push(level);
       }
@@ -737,11 +1133,42 @@ export default function WhiteboardPage() {
       const finalBars = [...leftSide, ...mirroredBars];
       
       setAudioLevels(finalBars);
-      
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
+    lastVisualizationUpdateRef.current = Date.now();
+  };
+
+  // Decay animation for waves (gradually reduce levels when no transcription)
+  const startWaveDecayAnimation = () => {
+    if (visualizationIntervalRef.current) {
+      clearInterval(visualizationIntervalRef.current);
+    }
     
-    animate();
+    visualizationIntervalRef.current = setInterval(() => {
+      if (!isMicActiveRef.current) {
+        if (visualizationIntervalRef.current) {
+          clearInterval(visualizationIntervalRef.current);
+          visualizationIntervalRef.current = null;
+        }
+        setAudioLevels(Array(20).fill(0));
+        return;
+      }
+      
+      // Gradually decay the wave levels
+      setAudioLevels(prevLevels => {
+        const now = Date.now();
+        const timeSinceLastUpdate = lastVisualizationUpdateRef.current 
+          ? now - lastVisualizationUpdateRef.current 
+          : Infinity;
+        
+        // If no transcription in the last 500ms, start decaying (increased from 300ms for better visibility)
+        if (timeSinceLastUpdate > 500) {
+          const decayRate = 0.92; // Decay by 8% each frame (slower decay for better visibility)
+          return prevLevels.map(level => Math.max(0, level * decayRate));
+        }
+        
+        // Otherwise maintain current levels (they'll be updated by triggerWaveAnimation)
+        return prevLevels;
+      });
+    }, 50); // Update every 50ms for smooth decay
   };
 
   // Toggle microphone
@@ -798,30 +1225,12 @@ export default function WhiteboardPage() {
           return;
         }
         
-        if (micStreamRef.current || audioContextRef.current) {
+        if (micStreamRef.current && isMicActiveRef.current) {
           return; // Already initialized
         }
         
         console.log('Initializing microphone on mount...');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
-        
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioContextRef.current = audioContext;
-        
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.7;
-        analyser.minDecibels = -90;
-        analyser.maxDecibels = -10;
-        analyserRef.current = analyser;
-        
-        const microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-        
-        setIsMicActive(true);
-        console.log('Microphone initialized successfully');
-        visualizeAudio();
+        await startMicrophone();
       } catch (err) {
         console.error('Error initializing microphone:', err);
       }
@@ -829,6 +1238,7 @@ export default function WhiteboardPage() {
     
     const timer = setTimeout(initMic, 100);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode]); // Re-run when inputMode changes
 
   // Handle submit
@@ -967,6 +1377,7 @@ export default function WhiteboardPage() {
           tohelp,
           screenshot: screenshotBase64,
           excalidrawData: excalidrawDataToSave,
+          conversationHistory: conversationHistory, // Include conversation history/transcript
           model: selectedModel,
           completionTimeSeconds: completionTimeSeconds,
           completionTimeMinutes: completionTimeMinutes,
@@ -1160,51 +1571,51 @@ const loadTestJSON = async () => {
       files: {},
     };
     
-    const storageKey = getLocalStorageKey();
-    console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
+      const storageKey = getLocalStorageKey();
+      console.log('🔍 Attempting to load whiteboard data with key:', storageKey);
     console.log('📋 Current localStorage keys:', Object.keys(localStorage).filter(k => k.startsWith('whiteboard_')));
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        
-        // Log what we're loading
-        const numElements = parsedData.elements?.length || 0;
-        const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
-        console.log('✅ Loaded whiteboard data from localStorage:', {
-          key: storageKey,
-          elementsCount: numElements,
-          filesCount: numFiles,
-          dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
-        });
-        
-        // Sanitize appState to remove/fix problematic properties
-        if (parsedData.appState) {
-          delete parsedData.appState.collaborators;
-          delete parsedData.appState.openMenu;
-          delete parsedData.appState.isLoading;
+      const savedData = localStorage.getItem(storageKey);
+      
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          
+          // Log what we're loading
+          const numElements = parsedData.elements?.length || 0;
+          const numFiles = parsedData.files ? Object.keys(parsedData.files).length : 0;
+          console.log('✅ Loaded whiteboard data from localStorage:', {
+            key: storageKey,
+            elementsCount: numElements,
+            filesCount: numFiles,
+            dataSize: (savedData.length / 1024).toFixed(2) + ' KB'
+          });
+          
+          // Sanitize appState to remove/fix problematic properties
+          if (parsedData.appState) {
+            delete parsedData.appState.collaborators;
+            delete parsedData.appState.openMenu;
+            delete parsedData.appState.isLoading;
+          }
+          
+          // Set the initialData ref with loaded data
+          excalidrawInitialDataRef.current = {
+            elements: parsedData.elements || [],
+            appState: {
+              ...defaultData.appState,
+              ...(parsedData.appState || {}),
+            },
+            files: parsedData.files || {},
+          };
+          
+          console.log('📦 Set initialData from localStorage');
+        } catch (error) {
+          console.error('❌ Error loading whiteboard data from localStorage:', error);
+          excalidrawInitialDataRef.current = defaultData;
         }
-        
-        // Set the initialData ref with loaded data
-        excalidrawInitialDataRef.current = {
-          elements: parsedData.elements || [],
-          appState: {
-            ...defaultData.appState,
-            ...(parsedData.appState || {}),
-          },
-          files: parsedData.files || {},
-        };
-        
-        console.log('📦 Set initialData from localStorage');
-      } catch (error) {
-        console.error('❌ Error loading whiteboard data from localStorage:', error);
+      } else {
+        console.log('ℹ️ No saved whiteboard data found, using default');
         excalidrawInitialDataRef.current = defaultData;
       }
-    } else {
-      console.log('ℹ️ No saved whiteboard data found, using default');
-      excalidrawInitialDataRef.current = defaultData;
-    }
 
     // Load interview state (timer + conversation)
     const interviewStateKey = `${storageKey}_interview_state`;
@@ -1238,11 +1649,55 @@ const loadTestJSON = async () => {
           if (parsedState.conversationHistory.length > 0) {
             hasInitialGreetingRef.current = true;
           }
+          
+          // CRITICAL: Clear any accumulated user message from previous session
+          // This ensures silence detection works correctly after reload
+          setCurrentUserMessage("");
+          currentUserMessageRef.current = "";
+          setInterimTranscript("");
+          console.log('🧹 Cleared currentUserMessage after reload to ensure fresh start');
+          
+          // Ensure conversation state is set correctly based on last message
+          // If last message was from assistant, set state to "waiting" so user can speak
+          const lastMessage = parsedState.conversationHistory[parsedState.conversationHistory.length - 1];
+          if (lastMessage && lastMessage.role === 'assistant') {
+            setConversationState("waiting");
+            conversationStateRef.current = "waiting";
+            console.log('✅ Set conversation state to "waiting" after reload (last message was from assistant)');
+          } else if (lastMessage && lastMessage.role === 'user') {
+            // Last message was from user - will be handled by continuation logic
+            setConversationState("waiting");
+            conversationStateRef.current = "waiting";
+            console.log('✅ Set conversation state to "waiting" after reload (last message was from user, continuation will handle)');
+    } else {
+            // No messages or empty history - ensure state is waiting
+            setConversationState("waiting");
+            conversationStateRef.current = "waiting";
+            console.log('✅ Set conversation state to "waiting" after reload (no messages)');
+          }
+        } else {
+          // No conversation history - ensure state is waiting and clear any message
+          setConversationState("waiting");
+          conversationStateRef.current = "waiting";
+          setCurrentUserMessage("");
+          currentUserMessageRef.current = "";
+          setInterimTranscript("");
         }
         
         // Restore interview start time
         if (parsedState.interviewStartTime) {
           interviewStartTimeRef.current = parsedState.interviewStartTime;
+        }
+        
+        // Restore input mode and microphone state
+        if (parsedState.inputMode === 'speech' || parsedState.inputMode === 'keyboard') {
+          setInputMode(parsedState.inputMode);
+          inputModeRef.current = parsedState.inputMode;
+        }
+        
+        if (typeof parsedState.isMicActive === 'boolean') {
+          setIsMicActive(parsedState.isMicActive);
+          isMicActiveRef.current = parsedState.isMicActive;
         }
       } catch (error) {
         console.error('❌ Error loading interview state from localStorage:', error);
@@ -1255,6 +1710,57 @@ const loadTestJSON = async () => {
     setIsLocalStorageLoaded(true);
     console.log('✅ localStorage loading complete');
   }, [design, target, tohelp, getLocalStorageKey, isLocalStorageLoaded]);
+  
+  // Restore speech mode after state is loaded from localStorage
+  useEffect(() => {
+    // Only restore if localStorage was loaded and we have interview state
+    if (!isLocalStorageLoaded || !design || !target || !tohelp) {
+      return;
+    }
+    
+    // Ensure conversation state is properly initialized before restoring speech
+    // This is critical for silence detection to work after reload
+    if (conversationStateRef.current !== "waiting" && conversationStateRef.current !== "user_turn") {
+      console.log('🔄 Fixing conversation state after reload:', conversationStateRef.current, '-> "waiting"');
+      setConversationState("waiting");
+      conversationStateRef.current = "waiting";
+    }
+    
+    // Check if we should restore speech mode (use refs to get latest values)
+    const shouldRestoreSpeech = inputModeRef.current === 'speech' && isMicActiveRef.current;
+    
+    if (shouldRestoreSpeech) {
+      console.log('🔄 Restoring speech mode after page refresh...');
+      // Use a small delay to ensure all state updates have propagated
+      const timer = setTimeout(async () => {
+        try {
+          // Ensure conversation state is "waiting" before starting recognition
+          setConversationState("waiting");
+          conversationStateRef.current = "waiting";
+          
+          // Start microphone
+          await startMicrophone();
+          // Small delay to ensure mic is active
+          setTimeout(() => {
+            if (isMicActiveRef.current && inputModeRef.current === 'speech') {
+              // Ensure state is still correct before starting recognition
+              if (conversationStateRef.current !== "waiting" && conversationStateRef.current !== "user_turn") {
+                setConversationState("waiting");
+                conversationStateRef.current = "waiting";
+              }
+              startRecognition();
+              console.log('✅ Speech recognition restored after refresh, conversation state:', conversationStateRef.current);
+            }
+          }, 300);
+        } catch (error) {
+          console.error('❌ Error restoring speech mode:', error);
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocalStorageLoaded, design, target, tohelp]);
 
   // Track last save time to debounce saves
   const saveTimeoutRef = useRef(null);
@@ -1262,32 +1768,32 @@ const loadTestJSON = async () => {
 
   // Function to save whiteboard data to localStorage
   const saveToLocalStorage = useCallback((elements, appState, files) => {
-    console.log('💾 saveToLocalStorage called with:', {
-      elementsCount: elements?.length || 0,
-      filesCount: files ? Object.keys(files).length : 0,
-      hasDesign: !!design,
-      hasTarget: !!target,
-      hasTohelp: !!tohelp,
-      design,
-      target,
-      tohelp
-    });
-
     if (!design || !target || !tohelp) {
-      console.warn('⚠️ Skipping save - missing interview params:', { design, target, tohelp });
-      return;
+      return; // Silently skip if params not ready
+    }
+
+    // Check if there are actually any elements or files to save
+    const elementsCount = elements?.length || 0;
+    const filesCount = files ? Object.keys(files).length : 0;
+    
+    // If there's nothing to save and no previous data, skip
+    if (elementsCount === 0 && filesCount === 0) {
+      // Only skip if we haven't saved anything before (to allow clearing)
+      // But don't spam saves for empty canvas
+      if (!saveTimeoutRef.current) {
+        return; // Skip if no pending save and nothing to save
+      }
     }
 
     // Clear previous timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
-      console.log('🔄 Cleared previous save timeout');
     }
 
-    // Debounce: save 1 second after last change
+    // Debounce: save 2 seconds after last change (increased from 1 second)
     saveTimeoutRef.current = setTimeout(() => {
       const storageKey = getLocalStorageKey();
-      console.log('📝 Saving whiteboard to localStorage with key:', storageKey);
+      // Removed logging here to reduce console spam - only log on successful save
       
       // Sanitize appState before saving to avoid serialization issues
       const cleanAppState = appState ? { ...appState } : {};
@@ -1319,17 +1825,20 @@ const loadTestJSON = async () => {
       try {
         const jsonString = JSON.stringify(dataToSave);
         localStorage.setItem(storageKey, jsonString);
-        console.log('✅ Successfully saved whiteboard data to localStorage:', {
-          key: storageKey,
-          elementsCount: elements?.length || 0,
-          filesCount: Object.keys(serializableFiles).length,
-          dataSize: (jsonString.length / 1024).toFixed(2) + ' KB',
-          timestamp: new Date().toISOString()
-        });
+        // Only log when there's actual content (reduce console spam)
+        const actualElementsCount = elements?.length || 0;
+        const actualFilesCount = Object.keys(serializableFiles).length;
+        if (actualElementsCount > 0 || actualFilesCount > 0) {
+          console.log('✅ Saved whiteboard:', {
+            elements: actualElementsCount,
+            files: actualFilesCount,
+            size: (jsonString.length / 1024).toFixed(2) + ' KB'
+          });
+        }
       } catch (error) {
         console.error('❌ Error saving whiteboard data to localStorage:', error);
       }
-    }, 1000);
+    }, 2000); // Increased debounce to 2 seconds to reduce save frequency
   }, [design, target, tohelp, getLocalStorageKey]);
 
   // Function to save interview state (timer + conversation) to localStorage
@@ -1353,6 +1862,8 @@ const loadTestJSON = async () => {
         isPaused,
         conversationHistory,
         interviewStartTime: interviewStartTimeRef.current,
+        inputMode,
+        isMicActive,
         lastSaved: Date.now(),
       };
       
@@ -1368,14 +1879,51 @@ const loadTestJSON = async () => {
         console.error('❌ Error saving interview state:', error);
       }
     }, 500);
-  }, [design, target, tohelp, getLocalStorageKey, timeRemaining, isPaused, conversationHistory]);
+  }, [design, target, tohelp, getLocalStorageKey, timeRemaining, isPaused, conversationHistory, inputMode, isMicActive]);
 
-  // Auto-save interview state (timer + conversation) when they change
+  // Auto-save interview state when important state changes (NOT timer - timer is saved separately)
   useEffect(() => {
     if (isLocalStorageLoaded && design && target && tohelp) {
       saveInterviewStateToLocalStorage();
     }
-  }, [timeRemaining, conversationHistory, isPaused, isLocalStorageLoaded, design, target, tohelp, saveInterviewStateToLocalStorage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationHistory, isPaused, inputMode, isMicActive, isLocalStorageLoaded, design, target, tohelp]);
+
+  // Save timer state separately - only every 10 seconds to avoid constant saves
+  // Use refs to avoid recreating interval when timeRemaining changes every second
+  useEffect(() => {
+    if (!isLocalStorageLoaded || !design || !target || !tohelp) return;
+    
+    const timerSaveInterval = setInterval(() => {
+      if (timeRemainingRef.current > 0 && !isSubmittedRef.current) {
+        const storageKey = `${getLocalStorageKey()}_interview_state`;
+        
+        const interviewState = {
+          timeRemaining: timeRemainingRef.current,
+          isPaused: isPausedRef.current,
+          conversationHistory,
+          interviewStartTime: interviewStartTimeRef.current,
+          inputMode: inputModeRef.current,
+          isMicActive: isMicActiveRef.current,
+          lastSaved: Date.now(),
+        };
+        
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(interviewState));
+          console.log('✅ Saved interview state (timer periodic save):', {
+            key: storageKey,
+            timeRemaining: timeRemainingRef.current,
+            conversationCount: conversationHistory.length,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          console.error('❌ Error saving interview state:', error);
+        }
+      }
+    }, 10000); // Save timer state every 10 seconds
+    
+    return () => clearInterval(timerSaveInterval);
+  }, [isLocalStorageLoaded, design, target, tohelp, getLocalStorageKey, conversationHistory]);
 
   // Save immediately before page unload
   useEffect(() => {
@@ -1387,33 +1935,33 @@ const loadTestJSON = async () => {
         // Save whiteboard data
         if (excalidrawDataRef.current) {
           const { elements, appState, files } = excalidrawDataRef.current;
-          
-          const cleanAppState = appState ? { ...appState } : {};
-          delete cleanAppState.collaborators;
-          delete cleanAppState.openMenu;
-          delete cleanAppState.isLoading;
-          
-          const serializableFiles = files ? Object.fromEntries(
-            Object.entries(files).map(([key, file]) => [key, {
-              mimeType: file.mimeType,
-              id: file.id,
-              dataURL: file.dataURL,
-              created: file.created,
-              lastRetrieved: file.lastRetrieved,
-            }])
-          ) : {};
-          
-          const dataToSave = {
-            elements,
-            appState: cleanAppState,
-            files: serializableFiles,
-            scrollToContent: false,
-          };
-          
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+        
+        const cleanAppState = appState ? { ...appState } : {};
+        delete cleanAppState.collaborators;
+        delete cleanAppState.openMenu;
+        delete cleanAppState.isLoading;
+        
+        const serializableFiles = files ? Object.fromEntries(
+          Object.entries(files).map(([key, file]) => [key, {
+            mimeType: file.mimeType,
+            id: file.id,
+            dataURL: file.dataURL,
+            created: file.created,
+            lastRetrieved: file.lastRetrieved,
+          }])
+        ) : {};
+        
+        const dataToSave = {
+          elements,
+          appState: cleanAppState,
+          files: serializableFiles,
+          scrollToContent: false,
+        };
+        
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(dataToSave));
             console.log('💾 Force saved whiteboard on page unload');
-          } catch (error) {
+        } catch (error) {
             console.error('Error force saving whiteboard on unload:', error);
           }
         }
@@ -1425,6 +1973,8 @@ const loadTestJSON = async () => {
           isPaused: isPausedRef.current,
           conversationHistory,
           interviewStartTime: interviewStartTimeRef.current,
+          inputMode: inputModeRef.current,
+          isMicActive: isMicActiveRef.current,
           lastSaved: Date.now(),
         };
         
@@ -1449,21 +1999,188 @@ const loadTestJSON = async () => {
   }, [conversationHistory, currentUserMessage, interimTranscript, isProcessingAI]);
 
 // Generate initial AI greeting when interview is fully ready
-useEffect(() => {
+  useEffect(() => {
+  // Don't generate greeting if we already have conversation history (from localStorage)
+  // But allow continuation logic to handle it if last message was from user
+  if (conversationHistory.length > 0) {
+      hasInitialGreetingRef.current = true;
+    // Don't return early - let continuation logic check if we need to respond
+    // The continuation logic will handle responding to user messages
+    return;
+  }
+
+  // Check if all required conditions are met
+  const allParamsReady = design && target && tohelp;
+  
   if (
     isLocalStorageLoaded &&
-    design &&
-    target &&
-    tohelp &&
-    conversationHistory.length === 0 &&
+    allParamsReady &&
     !hasInitialGreetingRef.current
   ) {
+    // Set flag immediately to prevent multiple triggers
     hasInitialGreetingRef.current = true;
+    
+    // Function to attempt greeting generation
+    const attemptGreeting = () => {
+      // Double-check conditions before attempting
+      if (!design || !target || !tohelp) {
+        console.warn('⚠️ Cannot generate greeting - parameters not ready:', { design, target, tohelp });
+        hasInitialGreetingRef.current = false;
+        return;
+      }
+      
+      console.log('🎤 Attempting to generate initial AI greeting...', {
+        design,
+        target,
+        tohelp,
+        isLocalStorageLoaded
+      });
+      
+      generateAIResponse("", true).catch((error) => {
+        console.error('❌ Error generating initial greeting:', error);
+        // Reset flag to allow retry
+        hasInitialGreetingRef.current = false;
+      });
+    };
+    
+    // Try immediately with a small delay to ensure everything is ready
+    const timer1 = setTimeout(attemptGreeting, 800);
+    
+    // Retry after 2 seconds if first attempt might have failed
+    const timer2 = setTimeout(() => {
+      // Check if greeting was actually sent (conversation history should have assistant message)
+      const hasAssistantMessage = conversationHistory.some(msg => msg.role === 'assistant');
+      if (!hasAssistantMessage && !isProcessingAI && !hasInitialGreetingRef.current) {
+        console.log('🔄 Retrying initial greeting after delay...');
+        attemptGreeting();
+      }
+    }, 2000);
 
-    generateAIResponse("", true); // AI speaks first
-  }
-}, [isLocalStorageLoaded, design, target, tohelp, conversationHistory.length, generateAIResponse]);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  } else if (!allParamsReady && isLocalStorageLoaded && !hasInitialGreetingRef.current) {
+    // If params aren't ready yet but localStorage is loaded, wait a bit and check again
+      const timer = setTimeout(() => {
+      if (design && target && tohelp && !hasInitialGreetingRef.current && conversationHistory.length === 0) {
+        console.log('⏳ Parameters became available, triggering greeting...');
+        hasInitialGreetingRef.current = true;
+        generateAIResponse("", true).catch((error) => {
+          console.error('❌ Error generating initial greeting:', error);
+          hasInitialGreetingRef.current = false;
+        });
+      }
+      }, 1000);
+    
+      return () => clearTimeout(timer);
+    }
+}, [isLocalStorageLoaded, design, target, tohelp, conversationHistory, generateAIResponse, isProcessingAI]);
 
+  // Continue conversation after refresh if last message was from user
+  useEffect(() => {
+    // Only check once after localStorage is loaded
+    if (!isLocalStorageLoaded || hasCheckedContinuationRef.current) {
+      return;
+    }
+    
+    // Only proceed if we have conversation history and all params are ready
+    if (!design || !target || !tohelp) {
+      console.log('⏳ Waiting for interview params before checking continuation...');
+      return;
+    }
+    
+    if (conversationHistory.length === 0) {
+      // No conversation history, mark as checked
+      hasCheckedContinuationRef.current = true;
+      return;
+    }
+    
+    // Check if the last message was from the user (meaning AI needs to respond)
+    const lastMessage = conversationHistory[conversationHistory.length - 1];
+    console.log('🔍 Checking conversation continuation:', {
+      lastMessageRole: lastMessage?.role,
+      lastMessageContent: lastMessage?.content?.substring(0, 50),
+      conversationLength: conversationHistory.length
+    });
+    
+    if (lastMessage && lastMessage.role === 'user' && lastMessage.content && lastMessage.content.trim().length > 0) {
+      // Mark that we've checked to prevent duplicate responses
+      hasCheckedContinuationRef.current = true;
+      
+      // User sent a message but AI hasn't responded yet - continue the conversation
+      console.log('🔄 Last message was from user, continuing conversation after refresh...', {
+        userMessage: lastMessage.content.trim().substring(0, 100)
+      });
+      
+      // Wait a bit to ensure everything is initialized, then generate response
+      const timer1 = setTimeout(() => {
+        // Double-check conditions before generating response
+        if (!isProcessingAI && !isAISpeaking && design && target && tohelp) {
+          console.log('✅ Generating AI response to continue conversation...');
+          // Ensure conversation state is set before generating response
+          setConversationState("processing");
+          conversationStateRef.current = "processing";
+          generateAIResponse(lastMessage.content.trim(), false).catch((error) => {
+            console.error('❌ Error continuing conversation after refresh:', error);
+            // Reset flag to allow retry
+            hasCheckedContinuationRef.current = false;
+            // Reset conversation state on error
+            setConversationState("waiting");
+            conversationStateRef.current = "waiting";
+          });
+        } else {
+          console.warn('⚠️ Conditions not met for continuation (attempt 1):', {
+            isProcessingAI,
+            isAISpeaking,
+            hasDesign: !!design,
+            hasTarget: !!target,
+            hasTohelp: !!tohelp
+          });
+          // Reset conversation state if conditions aren't met
+          setConversationState("waiting");
+          conversationStateRef.current = "waiting";
+        }
+      }, 2000); // First attempt after 2 seconds
+      
+      // Retry after 4 seconds if first attempt didn't work
+      const timer2 = setTimeout(() => {
+        // Check if we're still processing or if AI is speaking (means response is being generated)
+        // If not processing and not speaking, and we still have the user message as last, retry
+        if (!isProcessingAI && !isAISpeaking && design && target && tohelp) {
+          // Check current conversation state - if last message is still from user, retry
+          const currentLastMessage = conversationHistory[conversationHistory.length - 1];
+          if (currentLastMessage && currentLastMessage.role === 'user' && 
+              currentLastMessage.content === lastMessage.content.trim()) {
+            console.log('🔄 Retrying conversation continuation (no response yet)...');
+            hasCheckedContinuationRef.current = false; // Reset to allow retry
+            setConversationState("processing");
+            conversationStateRef.current = "processing";
+            generateAIResponse(lastMessage.content.trim(), false).catch((error) => {
+              console.error('❌ Error on retry continuing conversation:', error);
+              // Reset conversation state on error
+              setConversationState("waiting");
+              conversationStateRef.current = "waiting";
+            });
+          }
+        }
+      }, 4000); // Retry after 4 seconds
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+      
+      return () => clearTimeout(timer);
+    } else {
+      // Last message was from assistant or no valid last message, mark as checked
+      console.log('ℹ️ Last message was from assistant or empty, no continuation needed');
+      hasCheckedContinuationRef.current = true;
+      // Ensure conversation state is set to "waiting" so user can speak
+      setConversationState("waiting");
+      conversationStateRef.current = "waiting";
+    }
+  }, [isLocalStorageLoaded, conversationHistory, design, target, tohelp, generateAIResponse, isProcessingAI, isAISpeaking]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -1483,12 +2200,17 @@ useEffect(() => {
 
       recognition.onstart = () => {
         isRecognitionRunningRef.current = true;
+        recognitionAbortedRef.current = false; // Clear aborted flag when recognition successfully starts
         // Record start time when recognition begins
         if (!recognitionStartTimeRef.current) {
           recognitionStartTimeRef.current = Date.now();
         }
         setIsListening(true);
+        // Ensure conversation state is set to "waiting" when recognition starts
+        // This is especially important after page reload
         setConversationState("waiting");
+        conversationStateRef.current = "waiting";
+        console.log('✅ Speech recognition started, set conversation state to "waiting"');
       };
 
       recognition.onresult = (event) => {
@@ -1560,9 +2282,25 @@ useEffect(() => {
           const finalTextTrimmed = finalText.trim();
           setTranscript((prev) => prev + finalTextTrimmed + " ");
           
+          // Trigger wave animation for final text
+          triggerWaveAnimation();
+          
+          // Ensure conversation state allows user to speak
+          // Always set to "user_turn" when user speaks, regardless of previous state
+          // This is important after page reload when state might not be properly initialized
+          const currentState = conversationStateRef.current;
+          if (currentState !== "user_turn") {
+            console.log('🔄 Setting conversation state to "user_turn" (user spoke, previous state:', currentState + ')');
+            setConversationState("user_turn");
+            conversationStateRef.current = "user_turn";
+          }
+          
           // Accumulate user message for conversation
           setCurrentUserMessage((prev) => {
             const updated = (prev + " " + finalTextTrimmed).trim();
+            // Update ref immediately (don't wait for useEffect)
+            currentUserMessageRef.current = updated;
+            console.log('📝 Updated currentUserMessage (final):', updated.substring(0, 50), 'length:', updated.length);
             // Reset silence timer when we get final text
             if (hasNewFinal) {
               resetSilenceTimer();
@@ -1574,7 +2312,22 @@ useEffect(() => {
         // Update interim transcript for real-time display
         if (interimText) {
           setInterimTranscript(interimText);
-          // Reset silence timer on any speech activity
+          // Trigger wave animation for interim text (continuous updates)
+          triggerWaveAnimation();
+          
+          // Ensure conversation state allows user to speak
+          // Always set to "user_turn" when user speaks, regardless of previous state
+          // This is important after page reload when state might not be properly initialized
+          const currentState = conversationStateRef.current;
+          if (currentState !== "user_turn") {
+            console.log('🔄 Setting conversation state to "user_turn" (interim speech detected, previous state:', currentState + ')');
+            setConversationState("user_turn");
+            conversationStateRef.current = "user_turn";
+          }
+          
+          // Reset silence timer on any speech activity (interim text means user is still speaking)
+          // Don't add interim text to currentUserMessage - it's temporary
+          // The timer will fire when interim text stops coming (user stops speaking)
           resetSilenceTimer();
         } else {
           setInterimTranscript("");
@@ -1583,8 +2336,17 @@ useEffect(() => {
 
       recognition.onerror = (event) => {
         console.error("Speech recognition error:", event.error);
-        if (event.error === "no-speech") {
+        isRecognitionRunningRef.current = false;
+        setIsListening(false);
+        
+        if (event.error === "aborted") {
+          // Recognition was aborted (usually because it's already running)
+          // Don't restart - the onend handler will check if restart is needed
+          recognitionAbortedRef.current = true;
+          console.log('⚠️ Speech recognition aborted (likely already running)');
+        } else if (event.error === "no-speech") {
           // Restart recognition if no speech detected, interview is active, and mic is active
+          recognitionAbortedRef.current = false; // Clear aborted flag for no-speech
           const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
           if (showInterview && !isPausedRef.current && isMicActiveRef.current) {
             setTimeout(() => {
@@ -1593,18 +2355,73 @@ useEffect(() => {
           }
         } else if (event.error === "not-allowed") {
           alert("Microphone access denied. Please enable microphone permissions.");
-          setIsListening(false);
+          recognitionAbortedRef.current = false;
+        } else {
+          // For other errors, clear aborted flag
+          recognitionAbortedRef.current = false;
         }
       };
 
       recognition.onend = () => {
+        const wasAborted = recognitionAbortedRef.current;
         isRecognitionRunningRef.current = false;
         setIsListening(false);
+        console.log('🔴 Speech recognition ended. Current state:', {
+          conversationState: conversationStateRef.current,
+          hasSilenceTimer: !!silenceTimerRef.current,
+          currentUserMessage: currentUserMessageRef.current.substring(0, 50),
+          messageLength: currentUserMessageRef.current.trim().length,
+          wasAborted
+        });
+        
+        // If recognition was aborted, don't restart immediately - it's likely already running
+        if (wasAborted) {
+          console.log('⚠️ Recognition was aborted, skipping restart to prevent loop');
+          recognitionAbortedRef.current = false; // Clear flag for next time
+          return;
+        }
+        
+        // Check if we have a pending user message that should trigger a response
+        // This is a FALLBACK in case the silence timer didn't fire for some reason
+        const userMsg = currentUserMessageRef.current.trim();
+        const state = conversationStateRef.current;
+        const processing = isProcessingAIRef.current;
+        const aiSpeaking = isAISpeakingRef.current;
+        
+        // If we have a user message and we're in user_turn state, and no silence timer is active,
+        // it means the timer should have fired but didn't - trigger response manually
+        if (state === "user_turn" && userMsg.length >= 3 && !processing && !aiSpeaking) {
+          if (!silenceTimerRef.current) {
+            // No timer active - it should have fired already, but didn't
+            // This is a fallback to ensure the response is generated
+            console.log('⚠️ Recognition ended with pending user message but no silence timer - triggering response as fallback');
+            // Small delay to ensure state is stable
+            setTimeout(() => {
+              // Double-check conditions before generating
+              const finalUserMsg = currentUserMessageRef.current.trim();
+              const finalState = conversationStateRef.current;
+              const finalProcessing = isProcessingAIRef.current;
+              const finalAISpeaking = isAISpeakingRef.current;
+              
+              if (finalState === "user_turn" && finalUserMsg.length >= 3 && !finalProcessing && !finalAISpeaking) {
+                console.log('✅ Fallback: Generating AI response for pending message');
+                handleSilenceDetected();
+              }
+            }, 100);
+          } else {
+            console.log('⏳ Silence timer still active, will fire soon');
+          }
+        }
+        
         // Only restart recognition if interview is still active, AI is not speaking, and mic is active
+        // Also check that recognition is not already running (double-check)
         const showInterview = timeRemainingRef.current > 0 && !isSubmittedRef.current;
-        if (showInterview && !isPausedRef.current && isMicActiveRef.current) {
+        if (showInterview && !isPausedRef.current && isMicActiveRef.current && !isRecognitionRunningRef.current) {
           setTimeout(() => {
+            // Double-check again before starting
+            if (!isRecognitionRunningRef.current && !isAISpeakingRef.current) {
             startRecognition();
+            }
           }, 500);
         }
       };
@@ -1653,7 +2470,8 @@ useEffect(() => {
         // Start recognition when interview is active, AI is not speaking, and mic is active
         const timeoutId = setTimeout(() => {
           // Double-check all conditions before starting
-          if (!isAISpeaking && inputMode === 'speech' && isMicActive) {
+          if (!isAISpeaking && inputMode === 'speech' && isMicActive && !isRecognitionRunningRef.current) {
+            console.log('Attempting to start speech recognition...');
             startRecognition();
           }
         }, 100);
@@ -1745,12 +2563,29 @@ useEffect(() => {
     >
       <Redo2 size={24} strokeWidth={1.2}/>
     </button>
+    <button 
+      onClick={handleClearWhiteboard}
+      aria-label="Clear whiteboard"
+      className="text-gray-700 hover:text-black transition-colors cursor-pointer"
+      title="Clear whiteboard"
+    >
+      <Trash2 size={24} strokeWidth={1.2}/>
+    </button>
+
     {/* <MessageCircleQuestionMark size={24} strokeWidth={1.2}/> */}
   </div>
         <div className="flex-1 w-full h-full relative rounded-xl overflow-visible">
          {isLocalStorageLoaded ? (
            <ExcalidrawWrapper
-             initialData={excalidrawInitialDataRef.current}
+             initialData={excalidrawInitialDataRef.current || {
+               elements: [],
+               appState: {
+                 viewBackgroundColor: "#ffffff",
+                 zenModeEnabled: true,
+                 currentItemFontFamily: 2,
+               },
+               files: {},
+             }}
              onReady={(api) => {
                excalidrawAPIRef.current = api;
              }}
@@ -1953,8 +2788,18 @@ useEffect(() => {
                       if (inputMode !== 'speech') {
                         setInputMode('speech');
                         setShowAskQuestions(true);
-                        // Small delay to ensure state updates, then start mic
-                        setTimeout(() => startMicrophone(), 50);
+                        // Start microphone and wait for it to be active
+                        try {
+                          await startMicrophone();
+                          // Small delay to ensure state updates propagate
+                          setTimeout(() => {
+                            if (isMicActiveRef.current && inputModeRef.current === 'speech') {
+                              startRecognition();
+                            }
+                          }, 200);
+                        } catch (error) {
+                          console.error('Failed to start microphone:', error);
+                        }
                       }
                     }}
                     className={`h-full px-3 py-2 rounded-xl pointer-events-auto gap-2 cursor-pointer flex items-center justify-center ${
@@ -1995,18 +2840,20 @@ useEffect(() => {
       </div> */}
 
       {/* Timer (Top Right Overlay) */}
-      <div className="absolute top-6 right-6 bg-white border border-[#e4e4e4] rounded-xl px-3 py-3 z-50 flex items-center gap-3">
+      <div className="absolute top-6 right-6  rounded-xl px-3 py-3 z-50 flex items-center gap-3">
+             <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-3 py-2 pl-2" >
               <button
           onClick={() => setIsPaused((prev) => !prev)}
           className="ml-2 text-black hover:text-gray-600"
         >
           {isPaused ? <Play size={16} strokeWidth={1.2} /> : <Pause size={16} strokeWidth={1.2} />}
         </button>
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl">
+      <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl">
           <Clock className="w-5 h-5  text-black" size={16} strokeWidth={1.3} />
         <span className={`${timeRemaining < 300 ? 'text-red-400' : 'text-black'}`}>
           {formatTime(timeRemaining)}
         </span>
+      </div>
       </div>
 
         <button
@@ -2104,53 +2951,51 @@ useEffect(() => {
           </div>
         </div>
       )}
+
+      {/* Clear Whiteboard Confirmation Modal */}
+      {showClearWhiteboardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ zIndex: 9999 }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowClearWhiteboardModal(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full ">
+            <div className="flex flex-col gap-6">
+              {/* Title */}
+              <div className="flex flex-col gap-2">
+                <h2 className="text-2xl font-serif text-black">
+                  Clear Whiteboard?
+                </h2>
+                <p className="text-base text-gray-600">
+                  This will clear all drawings and shapes on the whiteboard. Your timer and conversation history will be preserved.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearWhiteboardModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gray-100 cursor-pointer hover:bg-gray-200 text-black transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmClearWhiteboard}
+                  className="flex-1 px-4 py-3 rounded-xl bg-red-100 cursor-pointer hover:bg-red-200 text-black transition-colors"
+                >
+                  Clear Whiteboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
      
     </div>
     </>
   );
 }
 
-
-  // <div className="absolute left-3 bottom-3 w-[360px] border border-[#e4e4e4] rounded-xl p-6 bg-white/70 backdrop-blur-sm z-50 flex gap-2.5 items-start">
-
-  //       {/* Message Content */}
-  //         <div className="flex-1 font-normal gap-1 flex flex-col min-w-0">
-            
-  //           {/* Status indicators */}
-  //           <div className="flex items-center gap-2 mt-2">
-  //             {isListening && conversationState === "user_turn" && (
-  //               <div className="flex items-center gap-1">
-  //                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-  //                 <span className="text-xs text-gray-600">Listening</span>
-  //               </div>
-  //             )}
-  //             {isProcessingAI && (
-  //               <div className="flex items-center gap-1">
-  //                 <i className="fa-solid fa-spinner fa-spin text-[#3168f5]"></i>
-  //                 <span className="text-xs text-gray-600">Thinking...</span>
-  //               </div>
-  //             )}
-  //             {hasPendingAudio && (
-  //               <button
-  //                 onClick={playPendingAudio}
-  //                 className="px-2 py-1 bg-[#3168f5] text-white text-xs rounded hover:bg-[#2557d4]"
-  //               >
-  //                 <i className="fa-solid fa-play mr-1"></i>
-  //                 Play Response
-  //               </button>
-  //             )}
-  //           </div>
-
-  //                     <h3 className="text-xl text-black font-serif">Interviewer</h3>
-  //           {conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'assistant'&&  (
-  //             <p className="text-sm text-black whitespace-pre-wrap">
-  //               <span>{conversationHistory[conversationHistory.length - 1].content}</span>
-  //             </p>
-  //           )
-  //           }
-
-  //         </div>
-  //     </div>
-
-
-  

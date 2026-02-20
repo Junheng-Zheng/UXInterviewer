@@ -212,7 +212,7 @@ return (
     </div> */}
 
     {/* Main framed container */}
-    <div className="flex-1 flex  h-full items-stretch justify-center z-10 p-8">
+    <div className="flex-1 flex  h-full items-stretch justify-center z-10 p-0">
         <div className="flex w-full  relative bg-white flex-col flex-1   rounded-xl items-stretch justify-center">
         <div className="absolute top-0 left-0   w-full h-full z-2 bg-[radial-gradient(circle,rgba(156,163,175,0.2)_1px,transparent_1px)] pointer-events-none" style={{ backgroundSize: '16px 16px' }}/>
       

@@ -184,7 +184,7 @@ useEffect(() => {
       {/* <Navbar activeTab="interview" className="absolute left-1/2 -translate-x-1/2" /> */}
 
       {/* Main Content */}
-      <div className = "flex-1 flex flex-col gap-0 items-center  justify-center xl:p-8">
+      <div className = "flex-1 flex flex-col gap-0 items-center  justify-center ">
 
        <div className="flex w-full h-full flex-1 flex-col bg-white relative rounded-xl gap-0 items-center z-1 justify-center">
         
