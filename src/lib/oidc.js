@@ -63,7 +63,7 @@ export async function getAuthorizationUrl(state, nonce) {
     const oidcClient = await getOidcClient();
     
     const authUrl = oidcClient.authorizationUrl({
-      scope: 'openid email profile offline_access aws.cognito.signin.user.admin', // aws.cognito.signin.user.admin required for GetUserAttributeVerificationCode (email verification)
+      scope: 'openid email profile offline_access aws.cognito.signin.user.admin',
       state,
       nonce,
     });
@@ -74,6 +74,37 @@ export async function getAuthorizationUrl(state, nonce) {
     console.error('Error generating authorization URL:', error);
     throw error;
   }
+}
+
+const OAUTH_SCOPE = 'openid email profile offline_access aws.cognito.signin.user.admin';
+
+/** Authorized scopes for Sign in with Google (Cognito federated IdP). */
+const GOOGLE_OAUTH_SCOPE = 'openid profile email';
+
+/**
+ * Get the authorization URL for Sign in with Google (Cognito federated IdP).
+ * Builds the Cognito authorize URL with identity_provider=Google so users go straight to Google.
+ */
+export function getGoogleAuthorizationUrl(state, nonce) {
+  if (!COGNITO_DOMAIN || !CLIENT_ID) {
+    const missing = [];
+    if (!COGNITO_DOMAIN) missing.push('COGNITO_DOMAIN');
+    if (!CLIENT_ID) missing.push('COGNITO_CLIENT_ID');
+    throw new Error(`Missing required configuration: ${missing.join(', ')}`);
+  }
+
+  const params = new URLSearchParams({
+    identity_provider: 'Google',
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    scope: GOOGLE_OAUTH_SCOPE,
+    prompt: 'select_account',
+    state,
+    nonce,
+  });
+
+  return `https://${COGNITO_DOMAIN}/oauth2/authorize?${params.toString()}`;
 }
 
 /**
@@ -93,17 +124,20 @@ export function getLogoutUrl() {
 
 /**
  * Exchange authorization code for tokens
+ * @param {string} code - Authorization code from callback URL
+ * @param {string} nonce - Stored nonce for verification
+ * @param {string} state - State from callback URL (returned by IdP)
+ * @param {string} storedState - Expected state (stored in cookie) for openid-client checks
  */
-export async function exchangeCodeForTokens(code, nonce, state) {
+export async function exchangeCodeForTokens(code, nonce, state, storedState) {
   const oidcClient = await getOidcClient();
   
-  // Create params object with the authorization code and state
   const params = {
-    code: code,
-    state: state,
+    code,
+    state,
   };
   
-  const tokenSet = await oidcClient.callback(REDIRECT_URI, params, { nonce });
+  const tokenSet = await oidcClient.callback(REDIRECT_URI, params, { state: storedState, nonce });
   
   return tokenSet;
 }

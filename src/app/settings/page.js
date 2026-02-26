@@ -33,6 +33,7 @@ const Page= () => {
   const [passwordMessage, setPasswordMessage] = useState(null);
   const [managePortalLoading, setManagePortalLoading] = useState(false);
   const [managePortalError, setManagePortalError] = useState(null);
+  const [identityProvider, setIdentityProvider] = useState(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -45,6 +46,7 @@ const Page= () => {
             lastName: data.familyName || '',
             email: data.email || '',
           });
+          setIdentityProvider(data.identityProvider ?? null);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -117,7 +119,7 @@ const Page= () => {
       const body = {};
       if (userData.firstName?.trim()) body.firstName = userData.firstName.trim();
       if (userData.lastName?.trim()) body.lastName = userData.lastName.trim();
-      if (userData.email?.trim()) body.email = userData.email.trim();
+      if (userData.email?.trim() && identityProvider !== 'Google') body.email = userData.email.trim();
       if (Object.keys(body).length === 0) {
         setProfileMessage('No changes to save');
         return;
@@ -152,6 +154,7 @@ const Page= () => {
             lastName: refetchData.familyName ?? '',
             email: refetchData.email ?? '',
           });
+          setIdentityProvider(refetchData.identityProvider ?? null);
         }
       }
     } catch (error) {
@@ -291,6 +294,7 @@ const Page= () => {
           lastName: refetchData.familyName ?? '',
           email: refetchData.email ?? '',
         });
+        setIdentityProvider(refetchData.identityProvider ?? null);
       }
     } catch (err) {
       setVerifyError(err.message || 'Verification failed');
@@ -367,7 +371,17 @@ const Page= () => {
                 <div className = "flex gap-2 items-center">
                 <div className = "w-64 text-gray-600 flex items-center gap-2"> <Mail size={16} strokeWidth={1.3} className="text-gray-600" /> Email</div>
                 <div className = "flex flex-col gap-1 w-full">
-                  <input type="email" value={userData.email || ""} onChange={(e) => setUserData((prev) => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" className = "w-full bg-white rounded-xl border border-gray-200 px-4 py-3" />
+                  {identityProvider === 'Google' && (
+                    <p className="text-sm text-gray-500 mb-1">Linked with Google</p>
+                  )}
+                  <input
+                    type="email"
+                    value={userData.email || ""}
+                    onChange={(e) => setUserData((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="email@example.com"
+                    readOnly={identityProvider === 'Google'}
+                    className = {`w-full rounded-xl border border-gray-200 px-4 py-3 ${identityProvider === 'Google' ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'bg-white'}`}
+                  />
                   {emailSuccessMessage && <p className="text-green-600 text-sm">{emailSuccessMessage}</p>}
                 </div>
               </div>

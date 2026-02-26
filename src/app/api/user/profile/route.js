@@ -39,12 +39,15 @@ export async function GET() {
     user.UserAttributes?.forEach(attr => {
       attributes[attr.Name] = attr.Value;
     });
+
+    const identityProvider = user.Username?.startsWith('google_') ? 'Google' : null;
     
     return NextResponse.json({
       email: attributes.email || session.email,
       givenName: attributes.given_name || attributes.name?.split(' ')[0] || '',
       familyName: attributes.family_name || attributes.name?.split(' ').slice(1).join(' ') || '',
       name: attributes.name || '',
+      identityProvider,
     });
   } catch (error) {
     if (error.name === 'UserNotFoundException') {
@@ -101,15 +104,23 @@ export async function PATCH(request) {
 
     // Fetch current user when we need existing name or to compare email
     let currentAttrs = {};
+    let fetchedUser = null;
     if (firstName !== undefined || lastName !== undefined || email !== undefined) {
       const getCommand = new AdminGetUserCommand({
         UserPoolId: USER_POOL_ID,
         Username: cognitoUsername,
       });
-      const user = await cognitoClient.send(getCommand);
-      user.UserAttributes?.forEach((attr) => {
+      fetchedUser = await cognitoClient.send(getCommand);
+      fetchedUser.UserAttributes?.forEach((attr) => {
         currentAttrs[attr.Name] = attr.Value;
       });
+    }
+
+    if (fetchedUser && fetchedUser.Username?.startsWith('Google_') && email !== undefined) {
+      return NextResponse.json(
+        { error: 'Email cannot be changed for accounts linked with Google.' },
+        { status: 400 }
+      );
     }
 
     const currentEmail = currentAttrs.email || session.email || '';

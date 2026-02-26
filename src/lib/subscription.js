@@ -1,10 +1,12 @@
 import { getSession } from '@/lib/session'
+import { getCognitoUsername } from '@/lib/cognito-username';
 import { AdminGetUserCommand, AdminUpdateUserAttributesCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { cognitoClient } from '@/lib/cognito';
 
 export async function getUserSubscription() {
     const session = await getSession();
-    if (!session || !session.email) {
+    const cognitoUsername = session ? getCognitoUsername(session) : undefined;
+    if (!session || !cognitoUsername) {
         return { plan: 'free', period: 'monthly', status: 'inactive', updated: null, interviewsUsed: 0 };
     }
 
@@ -12,7 +14,7 @@ export async function getUserSubscription() {
         const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
         const command = new AdminGetUserCommand({
             UserPoolId: USER_POOL_ID,
-            Username: session.email,
+            Username: cognitoUsername,
         });
 
         const user = await cognitoClient.send(command);
@@ -57,25 +59,26 @@ export function canStartInterview(plan, interviewsUsed) {
 
 /**
  * Increment the InterviewsUsed count for a user in Cognito
- * @param {string} email - User email
+ * @param {Object} session - Session object (must have idToken or sub/email for getCognitoUsername)
  * @returns {Promise<number>} - The new interviewsUsed count
  */
-export async function incrementInterviewsUsed(email) {
+export async function incrementInterviewsUsed(session) {
     const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
-    
+
     if (!USER_POOL_ID) {
         throw new Error('COGNITO_USER_POOL_ID environment variable is not set');
     }
 
-    if (!email) {
-        throw new Error('Email is required to increment interviews used');
+    const cognitoUsername = session ? getCognitoUsername(session) : undefined;
+    if (!cognitoUsername) {
+        throw new Error('Not authenticated');
     }
 
     try {
         // First, get the current value
         const getCommand = new AdminGetUserCommand({
             UserPoolId: USER_POOL_ID,
-            Username: email,
+            Username: cognitoUsername,
         });
 
         const user = await cognitoClient.send(getCommand);
@@ -93,7 +96,7 @@ export async function incrementInterviewsUsed(email) {
         // Update the attribute with the new count
         const updateCommand = new AdminUpdateUserAttributesCommand({
             UserPoolId: USER_POOL_ID,
-            Username: email,
+            Username: cognitoUsername,
             UserAttributes: [
                 {
                     Name: 'custom:InterviewsUsed',
