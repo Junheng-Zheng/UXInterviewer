@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
-import History from "../Pages/History";
-import Whiteboard from "../Pages/Whiteboard";
+import dynamic from "next/dynamic";
+
+const History = dynamic(() => import("../Pages/History"), { ssr: false });
+const Whiteboard = dynamic(() => import("../Pages/Whiteboard"), { ssr: false });
 const Navigation = () => {
   const [navSelected, setNavSelected] = useState("Whiteboard");
   return (
