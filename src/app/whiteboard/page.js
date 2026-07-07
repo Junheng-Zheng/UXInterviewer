@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mic, MicOff, Clock, House, Redo2, MessageCircleQuestionMark, Play, Pause } from 'lucide-react';
 import ExcalidrawWrapper from '../Components/ExcalidrawWrapper';
@@ -17,7 +17,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export default function WhiteboardPage() {
+function WhiteboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -2108,6 +2108,20 @@ useEffect(() => {
      
     </div>
     </>
+  );
+}
+
+export default function WhiteboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center bg-white">
+          <p className="text-lg font-light text-black">Loading whiteboard...</p>
+        </div>
+      }
+    >
+      <WhiteboardClient />
+    </Suspense>
   );
 }
 
